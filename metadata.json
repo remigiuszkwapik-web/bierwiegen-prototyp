@@ -1,0 +1,5 @@
+{
+  "name": "Bierwiegen Prototyp",
+  "description": "Ein rundenbasiertes Party-Game, bei dem Spieler auf ein Zielgewicht trinken müssen. Wer am präzisesten ist, gewinnt!",
+  "requestFramePermissions": []
+}
