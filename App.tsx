@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Game, GameStatus, Player, Round, ViewMode, Reaction } from './types';
 import { SupabaseGameRepository } from './repositories/GameRepository';
-import { Card, Button, Input, BeerProgressBar, FloatingReaction, EmojiBar } from './components/UI';
+import { Card, Button, Input, BeerProgressBar, FloatingReaction, EmojiBar, PlacementCard } from './components/UI';
 import { MIN_DRINK_DIFF, MAX_DRINK_DIFF } from './constants';
 import { 
   calculateAverageDeviation, 
@@ -207,7 +207,7 @@ const App: React.FC = () => {
                         <Card className="border-amber-500/50 text-center py-10">
                           <h2 className="text-xs font-bold text-amber-500 uppercase mb-2">Ziel</h2>
                           <div className="text-6xl font-bungee text-white mb-2">{game.rounds.slice(-1)[0]?.targetWeight}g</div>
-                          <p className="text-slate-400 text-[10px] font-bold uppercase">Noch ca. {(game.players.find(p => p.id === viewerPlayerId)?.weights.slice(-1)[0] || 0) - (game.rounds.slice(-1)[0]?.targetWeight || 0)}g</p>
+                          <p className="text-slate-400 text-[10px] font-bold uppercase">Noch {(game.players.find(p => p.id === viewerPlayerId)?.weights.slice(-1)[0] || 0) - (game.rounds.slice(-1)[0]?.targetWeight || 0)}g</p>
                         </Card>
                     )}
                     <Card><h2 className="text-xs font-bold text-slate-500 uppercase mb-4">Ranking</h2><div className="space-y-2">{[...game.players].sort((a,b) => calculateAverageDeviation(a.deviations) - calculateAverageDeviation(b.deviations)).map((p, idx) => (<div key={p.id} className={`p-3 rounded-xl ${p.id === viewerPlayerId ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-slate-900/40'}`}><div className="flex justify-between items-center relative"><div className="flex items-center gap-2"><span className="font-bungee text-slate-600 text-[10px]">#{idx+1}</span><span className="font-bold text-sm">{p.name}</span><div className="relative">{game.reactions?.filter(r => r.targetPlayerId === p.id).map(r => <FloatingReaction key={r.id} emoji={r.emoji} />)}</div></div><div className="font-bungee text-xs">{calculateAverageDeviation(p.deviations)}g</div></div>{p.id !== viewerPlayerId && <div className="mt-2 flex justify-end"><EmojiBar onReact={(emoji) => { updateGame(prev => { if(!prev) return null; return { ...prev, reactions: [...(prev.reactions || []), { id: Math.random().toString(36).substr(2, 9), emoji, targetPlayerId: p.id, timestamp: Date.now() }] }; }); }} /></div>}</div>))}</div></Card>
@@ -278,6 +278,11 @@ const App: React.FC = () => {
                         </div>
                       ); 
                     })}</div></Card>
+                    <PlacementCard
+                      players={[...game.players]
+                        .sort((a, b) => calculateAverageDeviation(a.deviations) - calculateAverageDeviation(b.deviations))
+                        .map(p => ({ id: p.id, name: p.name, averageDeviation: calculateAverageDeviation(p.deviations) }))}
+                    />
                     <Button onClick={() => { const currentMin = Math.min(...game.players.map(p => p.weights.slice(-1)[0])); updateGame(p => p ? {...p, status: currentMin < 100 ? GameStatus.FINISHED : GameStatus.SETTING_TARGET, currentRoundIndex: p.currentRoundIndex + 1} : null); }} className="w-full py-4 font-bungee">NÄCHSTE RUNDE</Button>
                 </div>
             )}

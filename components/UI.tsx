@@ -7,6 +7,29 @@ export const Card: React.FC<{ children: React.ReactNode, className?: string }> =
   </div>
 );
 
+export interface PlacementEntry {
+  id: string;
+  name: string;
+  averageDeviation: number;
+}
+
+export const PlacementCard: React.FC<{ players: PlacementEntry[]; title?: string }> = ({ players, title = 'Aktuelle Platzierung' }) => (
+  <Card>
+    <h2 className="text-xs font-bold text-slate-500 uppercase mb-4">{title}</h2>
+    <div className="space-y-2">
+      {players.map((p, idx) => (
+        <div key={p.id} className="p-3 rounded-xl border border-slate-700 bg-slate-900/40 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="font-bungee text-slate-500 text-sm w-6">#{idx + 1}</span>
+            <span className="font-bold text-white">{p.name}</span>
+          </div>
+          <span className="font-bungee text-amber-500">{p.averageDeviation}g</span>
+        </div>
+      ))}
+    </div>
+  </Card>
+);
+
 export const BeerProgressBar: React.FC<{ progress: number, label?: string }> = ({ progress, label }) => {
   const percentage = Math.round(progress * 100);
   return (
@@ -89,11 +112,13 @@ export const Input: React.FC<{
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   placeholder?: string;
   className?: string;
-}> = ({ label, type = 'text', value, onChange, placeholder, className = '' }) => (
+  inputMode?: 'none' | 'text' | 'tel' | 'url' | 'email' | 'numeric' | 'decimal' | 'search';
+}> = ({ label, type = 'text', value, onChange, placeholder, className = '', inputMode }) => (
   <div className={`flex flex-col gap-2 ${className}`}>
     {label && <label className="text-sm font-semibold text-slate-400 ml-1">{label}</label>}
     <input
       type={type}
+      inputMode={inputMode ?? (type === 'number' ? 'decimal' : undefined)}
       value={value}
       onChange={onChange}
       placeholder={placeholder}
