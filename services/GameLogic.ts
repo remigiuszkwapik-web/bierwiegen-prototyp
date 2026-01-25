@@ -24,11 +24,14 @@ export const getBottleType = (initialWeight: number): { label: string, liquidWei
   return { label: '0.33l', liquidWeight: 330 };
 };
 
+/** Füllstand der Flasche: 1 = voll, 0 = leer */
 export const getDrinkingProgress = (currentWeight: number, firstWeight: number): number => {
+  if (firstWeight <= 0) return 1;
   const { liquidWeight } = getBottleType(firstWeight);
   const drunk = firstWeight - currentWeight;
-  const progress = drunk / liquidWeight;
-  return Math.min(Math.max(progress, 0), 1);
+  const drunkRatio = drunk / liquidWeight;
+  const fillLevel = 1 - Math.min(Math.max(drunkRatio, 0), 1);
+  return fillLevel;
 };
 
 export const getPlayerPerformanceTag = (player: Player, allPlayers: Player[]): PerformanceTag => {
