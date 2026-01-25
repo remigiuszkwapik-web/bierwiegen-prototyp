@@ -260,32 +260,88 @@ const App: React.FC = () => {
                 <Card><h2 className="text-xl font-bungee text-center mb-6 uppercase">Endwiegen</h2><div className="space-y-3 mb-6">{game.players.map(p => (<div key={p.id} className="flex items-center justify-between p-3 bg-slate-900/40 rounded-xl"><div className="font-bold">{p.name}</div><div className="flex items-center gap-2"><Input type="number" value={inputs[p.id] || ''} onChange={(e) => setInputs({...inputs, [p.id]: e.target.value})} placeholder="000" className="w-20 text-center font-bungee" /><span className="text-slate-500 text-[10px] font-bold uppercase">g</span></div></div>))}</div><Button onClick={() => { if(!game.players.every(p => inputs[p.id])) return; updateGame(prev => { if(!prev) return null; const target = prev.rounds.slice(-1)[0].targetWeight; return { ...prev, status: GameStatus.ROUND_RESULT, players: prev.players.map(p => ({...p, weights: [...p.weights, parseInt(inputs[p.id])], deviations: [...p.deviations, Math.abs(parseInt(inputs[p.id]) - target)]})) }; }); setInputs({}); }} className="w-full py-4 font-bungee">AUSWERTEN</Button></Card>
             )}
 
-            {game.status === GameStatus.ROUND_RESULT && (
+            {game.status === GameStatus.ROUND_RESULT && (() => {
+                const roundResults = [...game.players].sort((a, b) => (a.deviations.slice(-1)[0] || 0) - (b.deviations.slice(-1)[0] || 0));
+                const roundWinner = roundResults[0];
+                const roundLoser = roundResults[roundResults.length - 1];
+                const currentRound = game.rounds.slice(-1)[0];
+                const penaltyTargetId = currentRound?.penaltyTargetId;
+                const penaltyTarget = penaltyTargetId ? game.players.find(p => p.id === penaltyTargetId) : null;
+                return (
                 <div className="space-y-4">
-                    <Card><h2 className="text-xl font-bungee text-center mb-6 uppercase">Ergebnis</h2><div className="space-y-3">{[...game.players].sort((a,b) => (a.deviations.slice(-1)[0] || 0) - (b.deviations.slice(-1)[0] || 0)).map((p, idx) => { 
-                      const target = game.rounds.slice(-1)[0].targetWeight; 
-                      const final = p.weights.slice(-1)[0]; 
-                      const diff = final - target; 
-                      const isAbove = diff > 0;
-
-                      return (
-                        <div key={p.id} className={`p-4 rounded-xl border flex justify-between items-center ${idx === 0 ? 'bg-green-500/10 border-green-500/30' : 'bg-slate-900/40 border-slate-700'}`}>
-                          <div className="font-bold">{p.name}</div>
-                          <div className="text-right">
-                            <div className={`font-bungee text-xl ${diff === 0 ? 'text-green-400' : isAbove ? 'text-red-400' : 'text-blue-400'}`}>{isAbove ? '+' : ''}{diff}g</div>
-                            <div className="text-[10px] text-slate-500 uppercase font-bold">{diff === 0 ? 'PUNKTGELANDET' : isAbove ? 'ZU WENIG GETRUNKEN' : 'ZU VIEL GETRUNKEN'}</div>
-                          </div>
+                    <Card>
+                        <h2 className="text-xl font-bungee text-center mb-6 uppercase">Ergebnis</h2>
+                        <div className="space-y-3">
+                            {roundResults.map((p, idx) => {
+                                const target = game.rounds.slice(-1)[0].targetWeight;
+                                const final = p.weights.slice(-1)[0];
+                                const diff = final - target;
+                                const isAbove = diff > 0;
+                                const isWinner = idx === 0;
+                                const isLoser = idx === roundResults.length - 1;
+                                return (
+                                    <div key={p.id} className={`p-4 rounded-xl border flex justify-between items-center ${isWinner ? 'bg-green-500/10 border-green-500/30' : 'bg-slate-900/40 border-slate-700'}`}>
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-bold">{p.name}</span>
+                                            {isWinner && <span className="text-[10px] font-bold uppercase text-green-500 bg-green-500/20 px-2 py-0.5 rounded">Rundensieger</span>}
+                                            {isLoser && <span className="text-[10px] font-bold uppercase text-amber-500 bg-amber-500/20 px-2 py-0.5 rounded">Rundenverlierer</span>}
+                                        </div>
+                                        <div className="text-right">
+                                            <div className={`font-bungee text-xl ${diff === 0 ? 'text-green-400' : isAbove ? 'text-red-400' : 'text-blue-400'}`}>{isAbove ? '+' : ''}{diff}g</div>
+                                            <div className="text-[10px] text-slate-500 uppercase font-bold">{diff === 0 ? 'PUNKTGELANDET' : isAbove ? 'ZU WENIG GETRUNKEN' : 'ZU VIEL GETRUNKEN'}</div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
-                      ); 
-                    })}</div></Card>
+                        <p className="text-slate-400 text-xs mt-4 text-center font-bold uppercase">Der Rundenverlierer trinkt mit dem Strafen-Empfänger einen Kurzen.</p>
+                    </Card>
+                    {!penaltyTargetId ? (
+                        <Card className="border-amber-500/50">
+                            <h2 className="text-sm font-bungee text-center mb-2 uppercase">Rundensieger wählt</h2>
+                            <p className="text-slate-400 text-xs text-center mb-4">Strafe an wen?</p>
+                            <div className="grid grid-cols-2 gap-2">
+                                {game.players.map(p => (
+                                    <button
+                                        key={p.id}
+                                        onClick={() => {
+                                            const roundIndex = game.rounds.length - 1;
+                                            updateGame(prev => {
+                                                if (!prev) return null;
+                                                const rounds = [...prev.rounds];
+                                                rounds[roundIndex] = { ...rounds[roundIndex], penaltyTargetId: p.id };
+                                                const players = prev.players.map(pl => pl.id === p.id ? { ...pl, penalties: pl.penalties + 1 } : pl);
+                                                return { ...prev, rounds, players };
+                                            });
+                                        }}
+                                        className="py-3 px-4 rounded-xl bg-slate-800 border border-slate-600 font-bold text-sm hover:bg-amber-500/20 hover:border-amber-500/50 transition-colors"
+                                    >
+                                        {p.name}
+                                    </button>
+                                ))}
+                            </div>
+                        </Card>
+                    ) : (
+                        <Card className="bg-amber-500/10 border-amber-500/30">
+                            <p className="text-center text-sm font-bold uppercase text-amber-500">Strafe an {penaltyTarget?.name} vergeben</p>
+                            <p className="text-center text-xs text-slate-400 mt-1">{roundLoser?.name} + {penaltyTarget?.name} trinken einen Kurzen.</p>
+                        </Card>
+                    )}
                     <PlacementCard
-                      players={[...game.players]
-                        .sort((a, b) => calculateAverageDeviation(a.deviations) - calculateAverageDeviation(b.deviations))
-                        .map(p => ({ id: p.id, name: p.name, averageDeviation: calculateAverageDeviation(p.deviations) }))}
+                        players={[...game.players]
+                            .sort((a, b) => calculateAverageDeviation(a.deviations) - calculateAverageDeviation(b.deviations))
+                            .map(p => ({ id: p.id, name: p.name, averageDeviation: calculateAverageDeviation(p.deviations) }))}
                     />
-                    <Button onClick={() => { const currentMin = Math.min(...game.players.map(p => p.weights.slice(-1)[0])); updateGame(p => p ? {...p, status: currentMin < 100 ? GameStatus.FINISHED : GameStatus.SETTING_TARGET, currentRoundIndex: p.currentRoundIndex + 1} : null); }} className="w-full py-4 font-bungee">NÄCHSTE RUNDE</Button>
+                    <Button
+                        onClick={() => { const currentMin = Math.min(...game.players.map(p => p.weights.slice(-1)[0])); updateGame(p => p ? {...p, status: currentMin < 100 ? GameStatus.FINISHED : GameStatus.SETTING_TARGET, currentRoundIndex: p.currentRoundIndex + 1} : null); }}
+                        disabled={!penaltyTargetId}
+                        className="w-full py-4 font-bungee"
+                    >
+                        NÄCHSTE RUNDE
+                    </Button>
                 </div>
-            )}
+                );
+            })()}
 
             {game.status === GameStatus.FINISHED && (
                 <Card className="text-center py-10"><div className="text-6xl mb-4">🏆</div><h2 className="text-3xl font-bungee text-amber-500 mb-8 uppercase">Finale</h2><div className="space-y-2 mb-8">{[...game.players].sort((a, b) => calculateAverageDeviation(a.deviations) - calculateAverageDeviation(b.deviations)).map((p, idx) => (<div key={p.id} className="p-4 rounded-xl border border-slate-800 bg-slate-900/60 flex items-center justify-between"><div className="font-bungee text-slate-600">#{idx + 1}</div><div className="font-bold">{p.name}</div><div className="font-bungee">{calculateAverageDeviation(p.deviations)}g</div></div>))}</div><Button onClick={() => updateGame(() => null)} className="w-full py-4 font-bungee">MENÜ</Button></Card>
