@@ -6,9 +6,9 @@ export const MAX_DRINK_DIFF = 100;
 export const MAX_DRINK_RANGE = 500;
 
 export const BOTTLE_SIZES = {
-  '0.33': { label: '0,33L (Kleines)', maxWeight: 700, finishedThreshold: 150 },
-  '0.5':  { label: '0,5L (Großes)',   maxWeight: 1000, finishedThreshold: 200 },
-  '1.0':  { label: '1,0L (Maß)',      maxWeight: 1600, finishedThreshold: 350 },
+  '0.33': { label: '0,33L (Kleines)', maxWeight: 700,  liquidWeight: 330,  finishedThreshold: 150 },
+  '0.5':  { label: '0,5L (Großes)',   maxWeight: 1000, liquidWeight: 500,  finishedThreshold: 200 },
+  '1.0':  { label: '1,0L (Maß)',      maxWeight: 1600, liquidWeight: 1000, finishedThreshold: 350 },
 } as const;
 
 export const PERFORMANCE_TAGS: Record<string, PerformanceTag> = {

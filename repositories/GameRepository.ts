@@ -2,8 +2,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { Game, GameRepository } from '../types';
 
-const SUPABASE_URL = 'https://nsktgxlgtdgnyolqfesu.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_6v6js6FjgV_2Mx7luCeCnQ_Fe8JnYmb';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 

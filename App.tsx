@@ -4,11 +4,13 @@ import { Game, GameStatus, Player, Round, ViewMode, Reaction, BottleSize } from 
 import { SupabaseGameRepository } from './repositories/GameRepository';
 import { Card, Button, Input, BeerProgressBar, FloatingReaction, EmojiBar, PlacementCard } from './components/UI';
 import { BOTTLE_SIZES } from './constants';
-import { 
-  calculateAverageDeviation, 
-  getPlayerPerformanceTag, 
+import {
+  calculateAverageDeviation,
+  getPlayerPerformanceTag,
   getDrinkingProgress,
-  generateGameCode
+  generateGameCode,
+  getPenaltiesGiven,
+  getDeviationTrend
 } from './services/GameLogic';
 
 const repo = new SupabaseGameRepository();
@@ -244,12 +246,17 @@ const App: React.FC = () => {
                 <>
                     <header className="flex justify-between items-end"><div><p className="text-[10px] text-slate-500 font-bold uppercase">Spieler</p><h1 className="text-2xl font-bungee text-amber-500">{game.players.find(p => p.id === viewerPlayerId)?.name}</h1></div><div className="text-right text-xs font-bold text-slate-500 uppercase">Code: {game.gameCode}</div></header>
                     <Card className="flex items-center gap-6 border-slate-700">
-                        <BeerProgressBar progress={getDrinkingProgress(game.players.find(p => p.id === viewerPlayerId)?.weights.slice(-1)[0] || 0, game.players.find(p => p.id === viewerPlayerId)?.weights[0] || 0)} />
+                        <BeerProgressBar progress={getDrinkingProgress(game.players.find(p => p.id === viewerPlayerId)?.weights.slice(-1)[0] || 0, game.players.find(p => p.id === viewerPlayerId)?.weights[0] || 0, game.bottleSize)} />
                         <div className="flex-1">
                           <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">Gewicht</div>
                           <div className="text-4xl font-bungee text-white mb-2">{game.players.find(p => p.id === viewerPlayerId)?.weights.slice(-1)[0] || 0}g</div>
                           <div className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
                             {getPlayerPerformanceTag(game.players.find(p => p.id === viewerPlayerId)!, game.players).icon} {getPlayerPerformanceTag(game.players.find(p => p.id === viewerPlayerId)!, game.players).label}
+                          </div>
+                          <div className="flex gap-3 mt-2">
+                            <div><div className="text-[9px] text-slate-600 font-bold uppercase">Trend</div><div className={`text-xs font-bungee ${getDeviationTrend(game.players.find(p => p.id === viewerPlayerId)?.deviations || []).color}`}>{getDeviationTrend(game.players.find(p => p.id === viewerPlayerId)?.deviations || []).label}</div></div>
+                            <div><div className="text-[9px] text-slate-600 font-bold uppercase">Kassiert</div><div className="text-xs font-bungee text-white">{game.players.find(p => p.id === viewerPlayerId)?.penalties ?? 0}</div></div>
+                            <div><div className="text-[9px] text-slate-600 font-bold uppercase">Verteilt</div><div className="text-xs font-bungee text-white">{getPenaltiesGiven(viewerPlayerId!, game.players, game.rounds)}</div></div>
                           </div>
                         </div>
                     </Card>
@@ -395,10 +402,10 @@ const App: React.FC = () => {
                     <PlacementCard
                         players={[...game.players]
                             .sort((a, b) => calculateAverageDeviation(a.deviations) - calculateAverageDeviation(b.deviations))
-                            .map(p => ({ id: p.id, name: p.name, averageDeviation: calculateAverageDeviation(p.deviations) }))}
+                            .map(p => ({ id: p.id, name: p.name, averageDeviation: calculateAverageDeviation(p.deviations), penalties: p.penalties, penaltiesGiven: getPenaltiesGiven(p.id, game.players, game.rounds) }))}
                     />
                     <Button
-                        onClick={() => { const currentMin = Math.min(...game.players.map(p => p.weights.slice(-1)[0])); const threshold = (BOTTLE_SIZES[game.bottleSize] ?? BOTTLE_SIZES['0.5']).finishedThreshold; updateGame(p => p ? {...p, status: currentMin < threshold ? GameStatus.FINISHED : GameStatus.SETTING_TARGET, currentRoundIndex: p.currentRoundIndex + 1} : null); }}
+                        onClick={() => { const currentMin = Math.min(...game.players.map(p => p.weights.slice(-1)[0])); const bottleCfg = BOTTLE_SIZES[game.bottleSize] ?? BOTTLE_SIZES['0.5']; const maxDrunk = Math.max(...game.players.map(p => (p.weights[0] || 0) - p.weights.slice(-1)[0])); const isFinished = currentMin < bottleCfg.finishedThreshold || maxDrunk >= bottleCfg.liquidWeight; updateGame(p => p ? {...p, status: isFinished ? GameStatus.FINISHED : GameStatus.SETTING_TARGET, currentRoundIndex: p.currentRoundIndex + 1} : null); }}
                         disabled={!penaltyTargetId}
                         className="w-full py-4 font-bungee"
                     >

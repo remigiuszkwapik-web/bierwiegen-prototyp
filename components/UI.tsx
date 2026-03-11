@@ -11,6 +11,8 @@ export interface PlacementEntry {
   id: string;
   name: string;
   averageDeviation: number;
+  penalties: number;
+  penaltiesGiven: number;
 }
 
 export const PlacementCard: React.FC<{ players: PlacementEntry[]; title?: string }> = ({ players, title = 'Aktuelle Platzierung' }) => (
@@ -23,7 +25,10 @@ export const PlacementCard: React.FC<{ players: PlacementEntry[]; title?: string
             <span className="font-bungee text-slate-500 text-sm w-6">#{idx + 1}</span>
             <span className="font-bold text-white">{p.name}</span>
           </div>
-          <span className="font-bungee text-amber-500">{p.averageDeviation}g</span>
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] font-bold text-slate-500 uppercase">K:{p.penalties} V:{p.penaltiesGiven}</span>
+            <span className="font-bungee text-amber-500">{p.averageDeviation}g</span>
+          </div>
         </div>
       ))}
     </div>

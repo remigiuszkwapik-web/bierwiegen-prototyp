@@ -1,6 +1,6 @@
 
-import { Player, PerformanceTag } from '../types';
-import { PERFORMANCE_TAGS } from '../constants';
+import { Player, PerformanceTag, Round, BottleSize } from '../types';
+import { PERFORMANCE_TAGS, BOTTLE_SIZES } from '../constants';
 
 export const calculateAverageDeviation = (deviations: number[]): number => {
   if (deviations.length === 0) return 0;
@@ -17,17 +17,10 @@ export const generateGameCode = (): string => {
   return result;
 };
 
-export const getBottleType = (initialWeight: number): { label: string, liquidWeight: number } => {
-  if (initialWeight > 720) {
-    return { label: '0.5l', liquidWeight: 500 };
-  }
-  return { label: '0.33l', liquidWeight: 330 };
-};
-
 /** Füllstand der Flasche: 1 = voll, 0 = leer */
-export const getDrinkingProgress = (currentWeight: number, firstWeight: number): number => {
+export const getDrinkingProgress = (currentWeight: number, firstWeight: number, bottleSize: BottleSize): number => {
   if (firstWeight <= 0) return 1;
-  const { liquidWeight } = getBottleType(firstWeight);
+  const { liquidWeight } = BOTTLE_SIZES[bottleSize];
   const drunk = firstWeight - currentWeight;
   const drunkRatio = drunk / liquidWeight;
   const fillLevel = 1 - Math.min(Math.max(drunkRatio, 0), 1);
@@ -52,5 +45,27 @@ export const getPlayerPerformanceTag = (player: Player, allPlayers: Player[]): P
 };
 
 export const canStartNextRound = (minWeight: number): boolean => {
-  return minWeight >= 280; 
+  return minWeight >= 280;
+};
+
+/** Wie viele Strafen hat ein Spieler verteilt (= Rundensiege mit Strafvergabe) */
+export const getPenaltiesGiven = (playerId: string, players: Player[], rounds: Round[]): number => {
+  return rounds.filter(r => {
+    if (!r.penaltyTargetId) return false;
+    const roundIndex = r.roundNumber - 1;
+    const playersWithDev = players.filter(p => p.deviations[roundIndex] !== undefined);
+    if (playersWithDev.length === 0) return false;
+    const minDev = Math.min(...playersWithDev.map(p => p.deviations[roundIndex]));
+    const winner = playersWithDev.find(p => p.deviations[roundIndex] === minDev);
+    return winner?.id === playerId;
+  }).length;
+};
+
+/** Verbesserungstrend: Vergleich letzte zwei Runden */
+export const getDeviationTrend = (deviations: number[]): { label: string; color: string } => {
+  if (deviations.length < 2) return { label: '—', color: 'text-slate-500' };
+  const diff = deviations[deviations.length - 2] - deviations[deviations.length - 1];
+  if (diff > 0) return { label: `↑ ${diff}g`, color: 'text-green-400' };
+  if (diff < 0) return { label: `↓ ${Math.abs(diff)}g`, color: 'text-red-400' };
+  return { label: '→ gleich', color: 'text-slate-400' };
 };
