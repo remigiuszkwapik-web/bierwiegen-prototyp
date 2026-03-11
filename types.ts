@@ -40,6 +40,8 @@ export interface Round {
   penaltyTargetId?: string;
 }
 
+export type BottleSize = '0.33' | '0.5' | '1.0';
+
 export interface Game {
   id: string;
   gameCode: string;
@@ -50,6 +52,7 @@ export interface Game {
   players: Player[];
   rounds: Round[];
   currentRoundIndex: number;
+  bottleSize: BottleSize;
   reactions?: Reaction[];
   declinedHostIds?: string[]; // IDs von Spielern, die Host-Übernahme abgelehnt haben
 }

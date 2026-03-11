@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Game, GameStatus, Player, Round, ViewMode, Reaction } from './types';
+import { Game, GameStatus, Player, Round, ViewMode, Reaction, BottleSize } from './types';
 import { SupabaseGameRepository } from './repositories/GameRepository';
 import { Card, Button, Input, BeerProgressBar, FloatingReaction, EmojiBar, PlacementCard } from './components/UI';
-import { MIN_DRINK_DIFF, MAX_DRINK_DIFF } from './constants';
+import { BOTTLE_SIZES } from './constants';
 import { 
   calculateAverageDeviation, 
   getPlayerPerformanceTag, 
@@ -12,6 +12,33 @@ import {
 } from './services/GameLogic';
 
 const repo = new SupabaseGameRepository();
+
+// ─── DEV MODE ────────────────────────────────────────────────────────────────
+const IS_DEV_PARAM = new URLSearchParams(window.location.search).get('dev') === 'true';
+
+const DEMO_GAME: Game = {
+  id: 'demo-game',
+  gameCode: 'DEMO',
+  hostId: 'dev-host',
+  createdAt: Date.now(),
+  isFinished: false,
+  status: GameStatus.SETTING_TARGET,
+  players: [
+    { id: 'p1', name: 'Max',  weights: [755, 698, 648], deviations: [2,  2],  penalties: 0 },
+    { id: 'p2', name: 'Anna', weights: [748, 694, 640], deviations: [6,  10], penalties: 1 },
+    { id: 'p3', name: 'Ben',  weights: [752, 688, 643], deviations: [12, 7],  penalties: 1 },
+    { id: 'p4', name: 'Lisa', weights: [745, 692, 635], deviations: [8,  15], penalties: 0 },
+  ],
+  rounds: [
+    { roundNumber: 1, targetWeight: 700, chooserPlayerId: 'p4', initialWeights: {}, finalWeights: {}, penaltyTargetId: 'p2' },
+    { roundNumber: 2, targetWeight: 650, chooserPlayerId: 'p4', initialWeights: {}, finalWeights: {}, penaltyTargetId: 'p3' },
+  ],
+  currentRoundIndex: 2,
+  bottleSize: '0.5',
+  reactions: [],
+  declinedHostIds: [],
+};
+// ─────────────────────────────────────────────────────────────────────────────
 
 const getUserId = () => {
     let id = localStorage.getItem('bierwiegen_user_id');
@@ -29,7 +56,10 @@ const App: React.FC = () => {
   const [viewerPlayerId, setViewerPlayerId] = useState<string | null>(null);
   const [presentUsers, setPresentUsers] = useState<string[]>([]);
   const [copyFeedback, setCopyFeedback] = useState(false);
-  
+  const [devMode, setDevMode] = useState(IS_DEV_PARAM);
+  const devModeRef = useRef(IS_DEV_PARAM);
+  useEffect(() => { devModeRef.current = devMode; }, [devMode]);
+
   const [newPlayerName, setNewPlayerName] = useState('');
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [inputs, setInputs] = useState<Record<string, string>>({});
@@ -46,6 +76,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!game?.gameCode) return;
+    if (devModeRef.current) return; // Kein Supabase in Dev-Modus
 
     const channel = repo.getChannel(game.gameCode);
     
@@ -88,9 +119,9 @@ const App: React.FC = () => {
     
     if (next) {
       setGame(next);
-      await repo.saveGame(next);
+      if (!devModeRef.current) await repo.saveGame(next);
     } else {
-      if (prev) {
+      if (prev && !devModeRef.current) {
         await repo.deleteGameFromDB(prev.gameCode);
       }
       setGame(null);
@@ -109,12 +140,28 @@ const App: React.FC = () => {
       players: [],
       rounds: [],
       currentRoundIndex: 0,
+      bottleSize: '0.5',
       reactions: [],
       declinedHostIds: []
     };
     setViewMode(ViewMode.HOST);
     updateGame(() => newGame);
   };
+
+  const loadDemoGame = useCallback(() => {
+    devModeRef.current = true;
+    setDevMode(true);
+    setGame({ ...DEMO_GAME, createdAt: Date.now() });
+    setViewMode(ViewMode.HOST);
+    setViewerPlayerId(null);
+    setInputs({});
+    setDrinkAmountInput('');
+  }, []);
+
+  // Auto-load demo wenn ?dev=true in URL
+  useEffect(() => {
+    if (IS_DEV_PARAM) loadDemoGame();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const joinGame = async () => {
     const code = joinCodeInput.toUpperCase().trim();
@@ -165,13 +212,16 @@ const App: React.FC = () => {
             <Input placeholder="CODE" value={joinCodeInput} onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())} className="text-center font-bungee text-3xl tracking-widest" />
             <Button onClick={joinGame} variant="secondary" className="w-full py-4">BEITRETEN</Button>
           </div>
+          <button onClick={loadDemoGame} className="text-[10px] text-slate-700 hover:text-slate-500 font-bold uppercase tracking-widest mt-4 block mx-auto">
+            ⚙ Dev Mode
+          </button>
         </Card>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen">
+    <div className={`min-h-screen${devMode ? ' pb-20' : ''}`}>
       {showHandoverDialog && (
         <div className="fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-6 text-center">
           <Card className="max-w-sm border-amber-500">
@@ -226,14 +276,29 @@ const App: React.FC = () => {
 
             {game.status === GameStatus.SETUP && (
                 <div className="space-y-6">
+                    <Card>
+                      <h2 className="text-lg font-bold mb-4 uppercase">Flaschengröße</h2>
+                      <div className="flex gap-2">
+                        {(Object.entries(BOTTLE_SIZES) as [BottleSize, typeof BOTTLE_SIZES[keyof typeof BOTTLE_SIZES]][]).map(([key, val]) => (
+                          <button
+                            key={key}
+                            onClick={() => updateGame(p => p ? { ...p, bottleSize: key } : null)}
+                            className={`flex-1 py-3 rounded-xl font-bungee border-2 transition-colors text-sm ${game.bottleSize === key ? 'bg-amber-500 border-amber-400 text-slate-900' : 'bg-slate-800 border-slate-700 text-white'}`}
+                          >{val.label}</button>
+                        ))}
+                      </div>
+                    </Card>
                     <Card><h2 className="text-lg font-bold mb-4 uppercase">Spieler</h2><div className="flex gap-2 mb-4"><Input value={newPlayerName} onChange={(e) => setNewPlayerName(e.target.value)} placeholder="Name..." className="flex-1" onKeyPress={(e) => e.key === 'Enter' && (newPlayerName.trim() && updateGame(p => p ? {...p, players: [...p.players, { id: Math.random().toString(36).substr(2, 9), name: newPlayerName.trim(), weights: [], deviations: [], penalties: 0 }]} : null), setNewPlayerName(''))} /><Button onClick={() => { if(!newPlayerName.trim()) return; updateGame(p => p ? {...p, players: [...p.players, { id: Math.random().toString(36).substr(2, 9), name: newPlayerName.trim(), weights: [], deviations: [], penalties: 0 }]} : null); setNewPlayerName(''); }}>Add</Button></div><div className="space-y-1">{game.players.map(p => (<div key={p.id} className="flex justify-between p-3 bg-slate-900/40 rounded-xl"><span className="font-bold">{p.name}</span><button onClick={() => updateGame(prev => prev ? { ...prev, players: prev.players.filter(pl => pl.id !== p.id) } : null)} className="text-red-500">✕</button></div>))}</div></Card>
                     <Button onClick={() => updateGame(p => p ? {...p, status: GameStatus.WEIGHING_INITIAL} : null)} disabled={game.players.length < 1} className="w-full py-4 text-xl font-bungee">START</Button>
                 </div>
             )}
 
-            {game.status === GameStatus.WEIGHING_INITIAL && (
-                <Card><h2 className="text-xl font-bungee text-center mb-6 uppercase">Initialwiegen</h2><div className="space-y-3 mb-6">{game.players.map(p => (<div key={p.id} className="flex items-center justify-between p-3 bg-slate-900/40 rounded-xl"><div className="font-bold">{p.name}</div><div className="flex items-center gap-2"><Input type="number" value={inputs[p.id] || ''} onChange={(e) => setInputs({...inputs, [p.id]: e.target.value})} placeholder="000" className="w-20 text-center font-bungee" /><span className="text-slate-500 text-[10px] font-bold uppercase">g</span></div></div>))}</div><Button onClick={() => { if(!game.players.every(p => inputs[p.id])) return; updateGame(prev => { if(!prev) return null; return { ...prev, status: GameStatus.SETTING_TARGET, players: prev.players.map(p => ({...p, weights: [parseInt(inputs[p.id])]})) }; }); setInputs({}); }} className="w-full py-4 font-bungee">FERTIG</Button></Card>
-            )}
+            {game.status === GameStatus.WEIGHING_INITIAL && (() => {
+                const maxW = (BOTTLE_SIZES[game.bottleSize] ?? BOTTLE_SIZES['0.5']).maxWeight;
+                return (
+                <Card><h2 className="text-xl font-bungee text-center mb-6 uppercase">Initialwiegen</h2><div className="space-y-3 mb-6">{game.players.map(p => (<div key={p.id} className="flex items-center justify-between p-3 bg-slate-900/40 rounded-xl"><div className="font-bold">{p.name}</div><div className="flex items-center gap-2"><Input type="number" value={inputs[p.id] || ''} onChange={(e) => { const raw = e.target.value; const num = parseInt(raw); if (!raw || isNaN(num)) { setInputs({...inputs, [p.id]: raw}); return; } setInputs({...inputs, [p.id]: Math.min(maxW, Math.max(1, num)).toString()}); }} placeholder="000" className="w-20 text-center font-bungee" /><span className="text-slate-500 text-[10px] font-bold uppercase">g</span></div></div>))}</div><Button onClick={() => { if(!game.players.every(p => inputs[p.id] && parseInt(inputs[p.id]) >= 1 && parseInt(inputs[p.id]) <= maxW)) { alert(`Bitte gültige Gewichte eingeben (1–${maxW}g)`); return; } updateGame(prev => { if(!prev) return null; return { ...prev, status: GameStatus.SETTING_TARGET, players: prev.players.map(p => ({...p, weights: [parseInt(inputs[p.id])]})) }; }); setInputs({}); }} className="w-full py-4 font-bungee">FERTIG</Button></Card>
+                );
+            })()}
 
             {game.status === GameStatus.SETTING_TARGET && (
                 <Card className="text-center"><h2 className="text-xl font-bungee mb-6 uppercase">Ziel wählen</h2>
@@ -241,8 +306,8 @@ const App: React.FC = () => {
                     <div className="text-[10px] font-bold text-amber-500 uppercase mb-1">Entscheider (Leerste Flasche)</div>
                     <div className="text-xl font-bold text-white mb-4">{minWeightPlayer?.name || '---'}</div>
                     <hr className="border-slate-800 mb-4" />
-                    <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">Referenz (Vollstes Bier)</div>
-                    <div className="text-4xl font-bungee text-white">{Math.max(...game.players.map(p => p.weights.slice(-1)[0]))}g</div>
+                    <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">Referenz</div>
+                    <div className="text-4xl font-bungee text-white">{minWeightPlayer?.weights.slice(-1)[0]}g</div>
                   </div>
                   <div className="space-y-4">
                     <div className="flex gap-2">{[30, 50, 100].map(val => <button key={val} onClick={() => setDrinkAmountInput(val.toString())} className={`flex-1 py-3 rounded-xl font-bungee border-2 transition-colors ${drinkAmountInput === val.toString() ? 'bg-amber-500 border-amber-400 text-slate-900' : 'bg-slate-800 border-slate-700'}`}>{val}g</button>)}</div>
@@ -257,7 +322,7 @@ const App: React.FC = () => {
             )}
 
             {game.status === GameStatus.WEIGHING_FINAL && (
-                <Card><h2 className="text-xl font-bungee text-center mb-6 uppercase">Endwiegen</h2><div className="space-y-3 mb-6">{game.players.map(p => (<div key={p.id} className="flex items-center justify-between p-3 bg-slate-900/40 rounded-xl"><div className="font-bold">{p.name}</div><div className="flex items-center gap-2"><Input type="number" value={inputs[p.id] || ''} onChange={(e) => setInputs({...inputs, [p.id]: e.target.value})} placeholder="000" className="w-20 text-center font-bungee" /><span className="text-slate-500 text-[10px] font-bold uppercase">g</span></div></div>))}</div><Button onClick={() => { if(!game.players.every(p => inputs[p.id])) return; updateGame(prev => { if(!prev) return null; const target = prev.rounds.slice(-1)[0].targetWeight; return { ...prev, status: GameStatus.ROUND_RESULT, players: prev.players.map(p => ({...p, weights: [...p.weights, parseInt(inputs[p.id])], deviations: [...p.deviations, Math.abs(parseInt(inputs[p.id]) - target)]})) }; }); setInputs({}); }} className="w-full py-4 font-bungee">AUSWERTEN</Button></Card>
+                <Card><h2 className="text-xl font-bungee text-center mb-6 uppercase">Endwiegen</h2><div className="space-y-3 mb-6">{game.players.map(p => { const maxForPlayer = p.weights[0] || (BOTTLE_SIZES[game.bottleSize] ?? BOTTLE_SIZES['0.5']).maxWeight; return (<div key={p.id} className="flex items-center justify-between p-3 bg-slate-900/40 rounded-xl"><div className="font-bold">{p.name}</div><div className="flex items-center gap-2"><Input type="number" value={inputs[p.id] || ''} onChange={(e) => { const raw = e.target.value; const num = parseInt(raw); if (!raw || isNaN(num)) { setInputs({...inputs, [p.id]: raw}); return; } setInputs({...inputs, [p.id]: Math.min(maxForPlayer, Math.max(0, num)).toString()}); }} placeholder="000" className="w-20 text-center font-bungee" /><span className="text-slate-500 text-[10px] font-bold uppercase">g</span></div></div>); })}</div><Button onClick={() => { const invalid = game.players.find(p => { const val = parseInt(inputs[p.id]); const maxForPlayer = p.weights[0] || (BOTTLE_SIZES[game.bottleSize] ?? BOTTLE_SIZES['0.5']).maxWeight; return !inputs[p.id] || isNaN(val) || val < 0 || val > maxForPlayer; }); if (invalid) { alert(`Ungültiger Wert für ${invalid.name}. Max: ${invalid.weights[0] || (BOTTLE_SIZES[game.bottleSize] ?? BOTTLE_SIZES['0.5']).maxWeight}g`); return; } updateGame(prev => { if(!prev) return null; const target = prev.rounds.slice(-1)[0].targetWeight; return { ...prev, status: GameStatus.ROUND_RESULT, players: prev.players.map(p => ({...p, weights: [...p.weights, parseInt(inputs[p.id])], deviations: [...p.deviations, Math.abs(parseInt(inputs[p.id]) - target)]})) }; }); setInputs({}); }} className="w-full py-4 font-bungee">AUSWERTEN</Button></Card>
             )}
 
             {game.status === GameStatus.ROUND_RESULT && (() => {
@@ -333,7 +398,7 @@ const App: React.FC = () => {
                             .map(p => ({ id: p.id, name: p.name, averageDeviation: calculateAverageDeviation(p.deviations) }))}
                     />
                     <Button
-                        onClick={() => { const currentMin = Math.min(...game.players.map(p => p.weights.slice(-1)[0])); updateGame(p => p ? {...p, status: currentMin < 100 ? GameStatus.FINISHED : GameStatus.SETTING_TARGET, currentRoundIndex: p.currentRoundIndex + 1} : null); }}
+                        onClick={() => { const currentMin = Math.min(...game.players.map(p => p.weights.slice(-1)[0])); const threshold = (BOTTLE_SIZES[game.bottleSize] ?? BOTTLE_SIZES['0.5']).finishedThreshold; updateGame(p => p ? {...p, status: currentMin < threshold ? GameStatus.FINISHED : GameStatus.SETTING_TARGET, currentRoundIndex: p.currentRoundIndex + 1} : null); }}
                         disabled={!penaltyTargetId}
                         className="w-full py-4 font-bungee"
                     >
@@ -346,6 +411,31 @@ const App: React.FC = () => {
             {game.status === GameStatus.FINISHED && (
                 <Card className="text-center py-10"><div className="text-6xl mb-4">🏆</div><h2 className="text-3xl font-bungee text-amber-500 mb-8 uppercase">Finale</h2><div className="space-y-2 mb-8">{[...game.players].sort((a, b) => calculateAverageDeviation(a.deviations) - calculateAverageDeviation(b.deviations)).map((p, idx) => (<div key={p.id} className="p-4 rounded-xl border border-slate-800 bg-slate-900/60 flex items-center justify-between"><div className="font-bungee text-slate-600">#{idx + 1}</div><div className="font-bold">{p.name}</div><div className="font-bungee">{calculateAverageDeviation(p.deviations)}g</div></div>))}</div><Button onClick={() => updateGame(() => null)} className="w-full py-4 font-bungee">MENÜ</Button></Card>
             )}
+        </div>
+      )}
+      {/* ─── DEV PANEL ─────────────────────────────────────────────── */}
+      {devMode && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-slate-950/95 border-t border-amber-500/30 backdrop-blur-sm px-3 py-2 flex items-center gap-2 flex-wrap">
+          <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest shrink-0">⚙ DEV</span>
+          <div className="w-px h-4 bg-slate-700 shrink-0" />
+          <div className="flex gap-1 flex-wrap flex-1">
+            <button
+              onClick={() => { setViewMode(ViewMode.HOST); setViewerPlayerId(null); }}
+              className={`px-3 py-1.5 rounded text-[10px] font-bold uppercase transition-colors ${viewMode === ViewMode.HOST ? 'bg-amber-500 text-slate-900' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+            >Host</button>
+            {game?.players.map(p => (
+              <button
+                key={p.id}
+                onClick={() => { setViewMode(ViewMode.PLAYER); setViewerPlayerId(p.id); }}
+                className={`px-3 py-1.5 rounded text-[10px] font-bold uppercase transition-colors ${viewMode === ViewMode.PLAYER && viewerPlayerId === p.id ? 'bg-blue-500 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+              >{p.name}</button>
+            ))}
+          </div>
+          <button
+            onClick={loadDemoGame}
+            title="Demo zurücksetzen"
+            className="text-[10px] font-bold text-slate-600 hover:text-slate-400 uppercase px-1 ml-auto shrink-0"
+          >↺ RESET</button>
         </div>
       )}
     </div>
