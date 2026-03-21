@@ -203,6 +203,46 @@ const App: React.FC = () => {
     updateGame(prev => prev ? { ...prev, declinedHostIds: [...(prev.declinedHostIds || []), myUserId] } : null);
   };
 
+  const goBack = () => {
+    setInputs({});
+    setDrinkAmountInput('');
+    updateGame(prev => {
+      if (!prev) return null;
+      switch (prev.status) {
+        case GameStatus.WEIGHING_INITIAL:
+          return { ...prev, status: GameStatus.SETUP, players: prev.players.map(p => ({ ...p, weights: [] })) };
+        case GameStatus.SETTING_TARGET:
+          if (prev.rounds.length === 0) {
+            return { ...prev, status: GameStatus.WEIGHING_INITIAL, players: prev.players.map(p => ({ ...p, weights: [] })) };
+          }
+          return { ...prev, status: GameStatus.ROUND_RESULT };
+        case GameStatus.DRINKING:
+          return { ...prev, status: GameStatus.SETTING_TARGET, rounds: prev.rounds.slice(0, -1) };
+        case GameStatus.WEIGHING_FINAL:
+          return { ...prev, status: GameStatus.DRINKING };
+        case GameStatus.ROUND_RESULT: {
+          const lastRound = prev.rounds[prev.rounds.length - 1];
+          const penaltyTargetId = lastRound?.penaltyTargetId;
+          return {
+            ...prev,
+            status: GameStatus.WEIGHING_FINAL,
+            players: prev.players.map(p => ({
+              ...p,
+              weights: p.weights.slice(0, -1),
+              deviations: p.deviations.slice(0, -1),
+              penalties: p.id === penaltyTargetId ? p.penalties - 1 : p.penalties,
+            })),
+            rounds: prev.rounds.map((r, i) =>
+              i === prev.rounds.length - 1 ? { ...r, penaltyTargetId: undefined } : r
+            ),
+          };
+        }
+        default:
+          return prev;
+      }
+    });
+  };
+
   if (!game) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4">
@@ -238,6 +278,54 @@ const App: React.FC = () => {
         </div>
       )}
 
+      {viewMode === ViewMode.HOST && game.status !== GameStatus.SETUP && game.players.length > 0 && (
+        <div className="px-4 pt-4 max-w-2xl mx-auto">
+          {!viewerPlayerId ? (
+            <div className="mb-2 p-3 bg-slate-900/60 rounded-xl border border-slate-700">
+              <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Welcher Spieler bist du?</p>
+              <div className="flex gap-2 flex-wrap">
+                {game.players.map(p => (
+                  <button key={p.id} onClick={() => setViewerPlayerId(p.id)}
+                    className="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-600 font-bold text-sm hover:bg-amber-500/20 hover:border-amber-500/50 transition-colors">
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (() => {
+            const me = game.players.find(p => p.id === viewerPlayerId);
+            if (!me) return null;
+            const currentRound = game.rounds.slice(-1)[0];
+            const target = currentRound?.targetWeight;
+            const myWeight = me.weights.slice(-1)[0] || 0;
+            const diff = target != null ? myWeight - target : null;
+            return (
+              <div className="mb-4 p-4 bg-slate-900/60 rounded-xl border border-amber-500/30 flex items-center gap-4">
+                <BeerProgressBar progress={getDrinkingProgress(myWeight, me.weights[0] || 0, game.bottleSize)} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-bungee text-amber-500 text-sm">{me.name}</span>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase">(Ich)</span>
+                    <button onClick={() => setViewerPlayerId(null)} className="ml-auto text-[10px] text-slate-600 hover:text-slate-400">✕</button>
+                  </div>
+                  <div className="text-2xl font-bungee text-white">{myWeight}g</div>
+                  {game.status === GameStatus.DRINKING && diff != null && (
+                    <div className={`text-xs font-bungee mt-1 ${diff === 0 ? 'text-green-400' : diff > 0 ? 'text-red-400' : 'text-blue-400'}`}>
+                      {diff > 0 ? `+${diff}g zu wenig` : diff < 0 ? `${diff}g zu viel` : 'Punktgelandet!'}
+                    </div>
+                  )}
+                  <div className="flex gap-3 mt-1">
+                    <div><span className="text-[9px] text-slate-600 font-bold uppercase">Ø Abw.</span> <span className="text-xs font-bungee">{calculateAverageDeviation(me.deviations)}g</span></div>
+                    <div><span className="text-[9px] text-slate-600 font-bold uppercase">Strafen</span> <span className="text-xs font-bungee">{me.penalties}</span></div>
+                    <div className={`text-xs font-bungee ${getDeviationTrend(me.deviations).color}`}>{getDeviationTrend(me.deviations).label}</div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
       {viewMode === ViewMode.PLAYER ? (
         <div className="p-4 max-w-2xl mx-auto space-y-6">
             {!viewerPlayerId ? (
@@ -251,7 +339,7 @@ const App: React.FC = () => {
                           <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">Gewicht</div>
                           <div className="text-4xl font-bungee text-white mb-2">{game.players.find(p => p.id === viewerPlayerId)?.weights.slice(-1)[0] || 0}g</div>
                           <div className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
-                            {getPlayerPerformanceTag(game.players.find(p => p.id === viewerPlayerId)!, game.players).icon} {getPlayerPerformanceTag(game.players.find(p => p.id === viewerPlayerId)!, game.players).label}
+                            {getPlayerPerformanceTag(game.players.find(p => p.id === viewerPlayerId)!, game.players, game.rounds).icon} {getPlayerPerformanceTag(game.players.find(p => p.id === viewerPlayerId)!, game.players, game.rounds).label}
                           </div>
                           <div className="flex gap-3 mt-2">
                             <div><div className="text-[9px] text-slate-600 font-bold uppercase">Trend</div><div className={`text-xs font-bungee ${getDeviationTrend(game.players.find(p => p.id === viewerPlayerId)?.deviations || []).color}`}>{getDeviationTrend(game.players.find(p => p.id === viewerPlayerId)?.deviations || []).label}</div></div>
@@ -276,6 +364,9 @@ const App: React.FC = () => {
             <header className="flex justify-between items-center">
                 <div><h1 className="text-xl font-bungee text-amber-500">HOST MODE</h1><p className="text-[10px] text-slate-500 font-bold uppercase">Code: {game.gameCode}</p></div>
                 <div className="flex gap-4 items-center">
+                  {game.status !== GameStatus.SETUP && game.status !== GameStatus.FINISHED && (
+                    <button onClick={goBack} className="text-slate-400 font-bold text-[10px] uppercase">← Zurück</button>
+                  )}
                   <button onClick={() => { const url = new URL(window.location.href); url.searchParams.set('code', game.gameCode); navigator.clipboard.writeText(url.toString()); setCopyFeedback(true); setTimeout(() => setCopyFeedback(false), 2000); }} className={`text-[10px] font-bold uppercase ${copyFeedback ? 'text-green-500' : 'text-slate-400'}`}>{copyFeedback ? 'Kopiert' : 'Link'}</button>
                   <button onClick={() => { if(window.confirm("Spiel wirklich beenden?")) updateGame(() => null); }} className="text-red-500 font-bold text-[10px] uppercase underline">Beenden</button>
                 </div>
@@ -319,7 +410,7 @@ const App: React.FC = () => {
                   <div className="space-y-4">
                     <div className="flex gap-2">{[30, 50, 100].map(val => <button key={val} onClick={() => setDrinkAmountInput(val.toString())} className={`flex-1 py-3 rounded-xl font-bungee border-2 transition-colors ${drinkAmountInput === val.toString() ? 'bg-amber-500 border-amber-400 text-slate-900' : 'bg-slate-800 border-slate-700'}`}>{val}g</button>)}</div>
                     <Input type="number" value={drinkAmountInput} onChange={(e) => setDrinkAmountInput(e.target.value)} placeholder="Menge..." className="text-center" />
-                    <Button onClick={() => { const amount = parseInt(drinkAmountInput); if(!amount) return; updateGame(prev => { if(!prev) return null; const currentMax = Math.max(...prev.players.map(p => p.weights.slice(-1)[0])); return { ...prev, status: GameStatus.DRINKING, rounds: [...prev.rounds, { roundNumber: prev.rounds.length + 1, targetWeight: currentMax - amount, chooserPlayerId: '', initialWeights: {}, finalWeights: {} }] }; }); setDrinkAmountInput(''); }} className="w-full py-4 font-bungee">RUNDE STARTEN</Button>
+                    <Button onClick={() => { const amount = parseInt(drinkAmountInput); if(!amount) return; updateGame(prev => { if(!prev) return null; const currentMin = Math.min(...prev.players.map(p => p.weights.slice(-1)[0])); return { ...prev, status: GameStatus.DRINKING, rounds: [...prev.rounds, { roundNumber: prev.rounds.length + 1, targetWeight: currentMin - amount, chooserPlayerId: '', initialWeights: {}, finalWeights: {} }] }; }); setDrinkAmountInput(''); }} className="w-full py-4 font-bungee">RUNDE STARTEN</Button>
                   </div>
                 </Card>
             )}
@@ -329,7 +420,7 @@ const App: React.FC = () => {
             )}
 
             {game.status === GameStatus.WEIGHING_FINAL && (
-                <Card><h2 className="text-xl font-bungee text-center mb-6 uppercase">Endwiegen</h2><div className="space-y-3 mb-6">{game.players.map(p => { const maxForPlayer = p.weights[0] || (BOTTLE_SIZES[game.bottleSize] ?? BOTTLE_SIZES['0.5']).maxWeight; return (<div key={p.id} className="flex items-center justify-between p-3 bg-slate-900/40 rounded-xl"><div className="font-bold">{p.name}</div><div className="flex items-center gap-2"><Input type="number" value={inputs[p.id] || ''} onChange={(e) => { const raw = e.target.value; const num = parseInt(raw); if (!raw || isNaN(num)) { setInputs({...inputs, [p.id]: raw}); return; } setInputs({...inputs, [p.id]: Math.min(maxForPlayer, Math.max(0, num)).toString()}); }} placeholder="000" className="w-20 text-center font-bungee" /><span className="text-slate-500 text-[10px] font-bold uppercase">g</span></div></div>); })}</div><Button onClick={() => { const invalid = game.players.find(p => { const val = parseInt(inputs[p.id]); const maxForPlayer = p.weights[0] || (BOTTLE_SIZES[game.bottleSize] ?? BOTTLE_SIZES['0.5']).maxWeight; return !inputs[p.id] || isNaN(val) || val < 0 || val > maxForPlayer; }); if (invalid) { alert(`Ungültiger Wert für ${invalid.name}. Max: ${invalid.weights[0] || (BOTTLE_SIZES[game.bottleSize] ?? BOTTLE_SIZES['0.5']).maxWeight}g`); return; } updateGame(prev => { if(!prev) return null; const target = prev.rounds.slice(-1)[0].targetWeight; return { ...prev, status: GameStatus.ROUND_RESULT, players: prev.players.map(p => ({...p, weights: [...p.weights, parseInt(inputs[p.id])], deviations: [...p.deviations, Math.abs(parseInt(inputs[p.id]) - target)]})) }; }); setInputs({}); }} className="w-full py-4 font-bungee">AUSWERTEN</Button></Card>
+                <Card><h2 className="text-xl font-bungee text-center mb-4 uppercase">Endwiegen</h2><div className="text-center mb-6"><p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Ziel</p><div className="text-4xl font-bungee text-amber-500">{game.rounds.slice(-1)[0]?.targetWeight}g</div></div><div className="space-y-3 mb-6">{game.players.map(p => { const maxForPlayer = p.weights[0] || (BOTTLE_SIZES[game.bottleSize] ?? BOTTLE_SIZES['0.5']).maxWeight; return (<div key={p.id} className="flex items-center justify-between p-3 bg-slate-900/40 rounded-xl"><div className="font-bold">{p.name}</div><div className="flex items-center gap-2"><Input type="number" value={inputs[p.id] || ''} onChange={(e) => { const raw = e.target.value; const num = parseInt(raw); if (!raw || isNaN(num)) { setInputs({...inputs, [p.id]: raw}); return; } setInputs({...inputs, [p.id]: Math.min(maxForPlayer, Math.max(0, num)).toString()}); }} placeholder="000" className="w-20 text-center font-bungee" /><span className="text-slate-500 text-[10px] font-bold uppercase">g</span></div></div>); })}</div><Button onClick={() => { const invalid = game.players.find(p => { const val = parseInt(inputs[p.id]); const maxForPlayer = p.weights[0] || (BOTTLE_SIZES[game.bottleSize] ?? BOTTLE_SIZES['0.5']).maxWeight; return !inputs[p.id] || isNaN(val) || val < 0 || val > maxForPlayer; }); if (invalid) { alert(`Ungültiger Wert für ${invalid.name}. Max: ${invalid.weights[0] || (BOTTLE_SIZES[game.bottleSize] ?? BOTTLE_SIZES['0.5']).maxWeight}g`); return; } updateGame(prev => { if(!prev) return null; const target = prev.rounds.slice(-1)[0].targetWeight; return { ...prev, status: GameStatus.ROUND_RESULT, players: prev.players.map(p => ({...p, weights: [...p.weights, parseInt(inputs[p.id])], deviations: [...p.deviations, Math.abs(parseInt(inputs[p.id]) - target)]})) }; }); setInputs({}); }} className="w-full py-4 font-bungee">AUSWERTEN</Button></Card>
             )}
 
             {game.status === GameStatus.ROUND_RESULT && (() => {

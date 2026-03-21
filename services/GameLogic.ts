@@ -27,7 +27,8 @@ export const getDrinkingProgress = (currentWeight: number, firstWeight: number, 
   return fillLevel;
 };
 
-export const getPlayerPerformanceTag = (player: Player, allPlayers: Player[]): PerformanceTag => {
+export const getPlayerPerformanceTag = (player: Player, allPlayers: Player[], rounds: Round[]): PerformanceTag => {
+  const avg = calculateAverageDeviation(player.deviations);
   if (player.penalties === 0 && player.deviations.length > 1) {
     return PERFORMANCE_TAGS.SAINT;
   }
@@ -36,11 +37,20 @@ export const getPlayerPerformanceTag = (player: Player, allPlayers: Player[]): P
     const othersWithMax = allPlayers.filter(p => p.penalties === maxPenalties).length;
     if (othersWithMax === 1) return PERFORMANCE_TAGS.JINX;
   }
-  const avg = calculateAverageDeviation(player.deviations);
   if (player.deviations.length < 2) return PERFORMANCE_TAGS.NOVICE;
+  const lastRound = rounds[rounds.length - 1];
+  if (lastRound) {
+    const lastFinalWeight = player.weights[player.weights.length - 1];
+    if (lastFinalWeight !== undefined && lastFinalWeight < lastRound.targetWeight - 15) {
+      return PERFORMANCE_TAGS.RISK_TAKER;
+    }
+  }
+  const spread = Math.max(...player.deviations) - Math.min(...player.deviations);
+  if (avg <= 3) return PERFORMANCE_TAGS.ORAL_SCALE;
   if (avg <= 8) return PERFORMANCE_TAGS.PRECISION;
   if (avg <= 15) return PERFORMANCE_TAGS.CALCULATOR;
-  if (avg > 30) return PERFORMANCE_TAGS.RISK_TAKER;
+  if (avg > 20) return PERFORMANCE_TAGS.NOVICE;
+  if (spread > 20) return PERFORMANCE_TAGS.UNPREDICTABLE;
   return PERFORMANCE_TAGS.NOVICE;
 };
 

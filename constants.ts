@@ -12,8 +12,13 @@ export const BOTTLE_SIZES = {
 } as const;
 
 export const PERFORMANCE_TAGS: Record<string, PerformanceTag> = {
+  ORAL_SCALE: {
+    label: 'Orale Waage',
+    icon: '👄',
+    description: 'Unter 5g Abweichung. Erschreckend präzise.'
+  },
   PRECISION: {
-    label: 'Präzisionsmonster',
+    label: 'Champions League',
     icon: '🎯',
     description: 'Sehr konstante, geringe Abweichungen.'
   },
