@@ -58,6 +58,17 @@ export const canStartNextRound = (minWeight: number): boolean => {
   return minWeight >= 280;
 };
 
+/** Wie viele Runden hat ein Spieler gewonnen (= niedrigste Abweichung) */
+export const getRoundWins = (playerId: string, players: Player[], rounds: Round[]): number => {
+  return rounds.filter(r => {
+    const roundIndex = r.roundNumber - 1;
+    const playersWithDev = players.filter(p => p.deviations[roundIndex] !== undefined);
+    if (playersWithDev.length === 0) return false;
+    const minDev = Math.min(...playersWithDev.map(p => p.deviations[roundIndex]));
+    return playersWithDev.find(p => p.deviations[roundIndex] === minDev)?.id === playerId;
+  }).length;
+};
+
 /** Wie viele Strafen hat ein Spieler verteilt (= Rundensiege mit Strafvergabe) */
 export const getPenaltiesGiven = (playerId: string, players: Player[], rounds: Round[]): number => {
   return rounds.filter(r => {
@@ -71,11 +82,12 @@ export const getPenaltiesGiven = (playerId: string, players: Player[], rounds: R
   }).length;
 };
 
-/** Verbesserungstrend: Vergleich letzte zwei Runden */
+/** Verbesserungstrend: Hat sich der Durchschnitt durch die letzte Runde verbessert? */
 export const getDeviationTrend = (deviations: number[]): { label: string; color: string } => {
   if (deviations.length < 2) return { label: '—', color: 'text-slate-500' };
-  const diff = deviations[deviations.length - 2] - deviations[deviations.length - 1];
-  if (diff > 0) return { label: `↑ ${diff}g`, color: 'text-green-400' };
-  if (diff < 0) return { label: `↓ ${Math.abs(diff)}g`, color: 'text-red-400' };
-  return { label: '→ gleich', color: 'text-slate-400' };
+  const prevAvg = calculateAverageDeviation(deviations.slice(0, -1));
+  const currAvg = calculateAverageDeviation(deviations);
+  if (currAvg < prevAvg) return { label: '↑', color: 'text-green-400' };
+  if (currAvg > prevAvg) return { label: '↓', color: 'text-red-400' };
+  return { label: '→', color: 'text-slate-400' };
 };

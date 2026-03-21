@@ -10,6 +10,7 @@ import {
   getDrinkingProgress,
   generateGameCode,
   getPenaltiesGiven,
+  getRoundWins,
   getDeviationTrend
 } from './services/GameLogic';
 
@@ -333,20 +334,74 @@ const App: React.FC = () => {
             ) : (
                 <>
                     <header className="flex justify-between items-end"><div><p className="text-[10px] text-slate-500 font-bold uppercase">Spieler</p><h1 className="text-2xl font-bungee text-amber-500">{game.players.find(p => p.id === viewerPlayerId)?.name}</h1></div><div className="text-right text-xs font-bold text-slate-500 uppercase">Code: {game.gameCode}</div></header>
-                    <Card className="flex items-center gap-6 border-slate-700">
-                        <BeerProgressBar progress={getDrinkingProgress(game.players.find(p => p.id === viewerPlayerId)?.weights.slice(-1)[0] || 0, game.players.find(p => p.id === viewerPlayerId)?.weights[0] || 0, game.bottleSize)} />
-                        <div className="flex-1">
-                          <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">Gewicht</div>
-                          <div className="text-4xl font-bungee text-white mb-2">{game.players.find(p => p.id === viewerPlayerId)?.weights.slice(-1)[0] || 0}g</div>
-                          <div className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
-                            {getPlayerPerformanceTag(game.players.find(p => p.id === viewerPlayerId)!, game.players, game.rounds).icon} {getPlayerPerformanceTag(game.players.find(p => p.id === viewerPlayerId)!, game.players, game.rounds).label}
+                    <Card className="border-slate-700">
+                      {(() => {
+                        const vp = game.players.find(p => p.id === viewerPlayerId)!;
+                        const devs = vp.deviations;
+                        const tag = getPlayerPerformanceTag(vp, game.players, game.rounds);
+                        const best = devs.length ? Math.min(...devs) : null;
+                        const worst = devs.length ? Math.max(...devs) : null;
+                        const last = devs.length ? devs[devs.length - 1] : null;
+                        const wins = getRoundWins(viewerPlayerId!, game.players, game.rounds);
+                        const maxDev = devs.length ? Math.max(...devs, 1) : 1;
+                        return (
+                          <div className="flex items-start gap-4">
+                            <BeerProgressBar progress={getDrinkingProgress(vp.weights.slice(-1)[0] || 0, vp.weights[0] || 0, game.bottleSize)} />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-end gap-8 mb-1">
+                                <div>
+                                  <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">Gewicht</div>
+                                  <div className="text-4xl font-bungee text-white">{vp.weights.slice(-1)[0] || 0}g</div>
+                                </div>
+                                <div>
+                                  <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">Trend</div>
+                                  <div className={`text-4xl font-bungee ${getDeviationTrend(devs).color}`}>{getDeviationTrend(devs).label}</div>
+                                </div>
+                              </div>
+                              <div className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1 mb-3">
+                                {tag.icon} {tag.label}
+                              </div>
+                              <div className="flex items-start gap-1 mb-3">
+                                <div className="grid grid-cols-4 gap-1 flex-1">
+                                  <div><div className="text-[9px] text-slate-600 font-bold uppercase">Letzte</div><div className="text-xs font-bungee text-white">{last ?? '—'}{last != null ? 'g' : ''}</div></div>
+                                  <div><div className="text-[9px] text-slate-600 font-bold uppercase">Beste</div><div className="text-xs font-bungee text-green-400">{best ?? '—'}{best != null ? 'g' : ''}</div></div>
+                                  <div><div className="text-[9px] text-slate-600 font-bold uppercase">Schlecht.</div><div className="text-xs font-bungee text-red-400">{worst ?? '—'}{worst != null ? 'g' : ''}</div></div>
+                                  <div><div className="text-[9px] text-slate-600 font-bold uppercase">Siege</div><div className="text-xs font-bungee text-amber-400">{wins}</div></div>
+                                </div>
+                                <div className="w-px self-stretch bg-slate-700 mx-1" />
+                                <div className="grid grid-cols-2 gap-1">
+                                  <div><div className="text-[9px] text-slate-600 font-bold uppercase">Kassiert</div><div className="text-xs font-bungee text-white">{vp.penalties}</div></div>
+                                  <div><div className="text-[9px] text-slate-600 font-bold uppercase">Verteilt</div><div className="text-xs font-bungee text-white">{getPenaltiesGiven(viewerPlayerId!, game.players, game.rounds)}</div></div>
+                                </div>
+                              </div>
+                              {devs.length > 0 && (
+                                <>
+                                  <div className="text-[9px] text-slate-600 font-bold uppercase mb-1">Rundenverlauf</div>
+                                  <div className="flex gap-1.5">
+                                    {devs.map((dev, idx) => {
+                                      const playersWithDev = game.players.filter(p => p.deviations[idx] !== undefined);
+                                      const isWin = dev === Math.min(...playersWithDev.map(p => p.deviations[idx]));
+                                      const finalWeight = vp.weights[idx + 1];
+                                      const target = game.rounds[idx]?.targetWeight;
+                                      const tooLittle = finalWeight != null && target != null && finalWeight > target;
+                                      const tooMuch = finalWeight != null && target != null && finalWeight < target;
+                                      return (
+                                        <div key={idx} className={`flex-1 rounded-lg px-1 py-1.5 text-center border ${isWin ? 'bg-amber-500/10 border-amber-500/40' : 'bg-slate-800/60 border-slate-700'}`}>
+                                          <div className={`text-[8px] font-bold uppercase mb-0.5 ${isWin ? 'text-amber-500' : 'text-slate-600'}`}>{isWin ? '★' : `R${idx + 1}`}</div>
+                                          <div className="flex items-center justify-center gap-0.5 leading-none">
+                                            <div className={`text-xs font-bungee ${isWin ? 'text-amber-400' : 'text-slate-300'}`}>{dev}g</div>
+                                            <div className={`text-[8px] font-bold ${tooLittle ? 'text-red-400' : tooMuch ? 'text-blue-400' : 'text-green-400'}`}>{tooLittle ? '+' : tooMuch ? '-' : '●'}</div>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex gap-3 mt-2">
-                            <div><div className="text-[9px] text-slate-600 font-bold uppercase">Trend</div><div className={`text-xs font-bungee ${getDeviationTrend(game.players.find(p => p.id === viewerPlayerId)?.deviations || []).color}`}>{getDeviationTrend(game.players.find(p => p.id === viewerPlayerId)?.deviations || []).label}</div></div>
-                            <div><div className="text-[9px] text-slate-600 font-bold uppercase">Kassiert</div><div className="text-xs font-bungee text-white">{game.players.find(p => p.id === viewerPlayerId)?.penalties ?? 0}</div></div>
-                            <div><div className="text-[9px] text-slate-600 font-bold uppercase">Verteilt</div><div className="text-xs font-bungee text-white">{getPenaltiesGiven(viewerPlayerId!, game.players, game.rounds)}</div></div>
-                          </div>
-                        </div>
+                        );
+                      })()}
                     </Card>
                     {game.status === GameStatus.DRINKING && (
                         <Card className="border-amber-500/50 text-center py-10">
