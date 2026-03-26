@@ -1,5 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import Lottie from 'lottie-react';
+import cheersAnimation from './src/assets/cheers.json';
 import { Game, GameStatus, Player, Round, ViewMode, Reaction, BottleSize } from './types';
 import { SupabaseGameRepository } from './repositories/GameRepository';
 import { Card, Button, Input, BeerProgressBar, FloatingReaction, EmojiBar, PlacementCard } from './components/UI';
@@ -67,9 +69,18 @@ const App: React.FC = () => {
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [drinkAmountInput, setDrinkAmountInput] = useState<string>('');
+  const [showCheers, setShowCheers] = useState(false);
   
   const gameRef = useRef<Game | null>(null);
   useEffect(() => { gameRef.current = game; }, [game]);
+
+  useEffect(() => {
+    if (game?.status === GameStatus.DRINKING) {
+      setShowCheers(true);
+      const timer = setTimeout(() => setShowCheers(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [game?.status]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -546,9 +557,19 @@ const App: React.FC = () => {
                         </Card>
                     )}
                     <PlacementCard
-                        players={[...game.players]
-                            .sort((a, b) => calculateAverageDeviation(a.deviations) - calculateAverageDeviation(b.deviations))
-                            .map(p => ({ id: p.id, name: p.name, averageDeviation: calculateAverageDeviation(p.deviations), penalties: p.penalties, penaltiesGiven: getPenaltiesGiven(p.id, game.players, game.rounds) }))}
+                        players={(() => {
+                            const sorted = [...game.players].sort((a, b) => calculateAverageDeviation(a.deviations) - calculateAverageDeviation(b.deviations));
+                            const prevSorted = [...game.players].sort((a, b) => calculateAverageDeviation(a.deviations.slice(0, -1)) - calculateAverageDeviation(b.deviations.slice(0, -1)));
+                            const prevRank: Record<string, number> = Object.fromEntries(prevSorted.map((p, i) => [p.id, i]));
+                            return sorted.map((p, currIdx) => ({
+                                id: p.id,
+                                name: p.name,
+                                averageDeviation: calculateAverageDeviation(p.deviations),
+                                penalties: p.penalties,
+                                penaltiesGiven: getPenaltiesGiven(p.id, game.players, game.rounds),
+                                rankChange: p.deviations.length > 1 ? prevRank[p.id] - currIdx : undefined,
+                            }));
+                        })()}
                     />
                     <Button
                         onClick={() => { const currentMin = Math.min(...game.players.map(p => p.weights.slice(-1)[0])); const bottleCfg = BOTTLE_SIZES[game.bottleSize] ?? BOTTLE_SIZES['0.5']; const maxDrunk = Math.max(...game.players.map(p => (p.weights[0] || 0) - p.weights.slice(-1)[0])); const isFinished = currentMin < bottleCfg.finishedThreshold || maxDrunk >= bottleCfg.liquidWeight; updateGame(p => p ? {...p, status: isFinished ? GameStatus.FINISHED : GameStatus.SETTING_TARGET, currentRoundIndex: p.currentRoundIndex + 1} : null); }}
@@ -589,6 +610,19 @@ const App: React.FC = () => {
             title="Demo zurücksetzen"
             className="text-[10px] font-bold text-slate-600 hover:text-slate-400 uppercase px-1 ml-auto shrink-0"
           >↺ RESET</button>
+        </div>
+      )}
+
+      {showCheers && (
+        <div className="fixed inset-0 z-50 pointer-events-none flex items-center justify-center">
+          <div className="flex flex-col items-center bg-slate-800/30 backdrop-blur-md border border-slate-700 rounded-3xl p-8 shadow-xl">
+            <p className="text-6xl font-bungee text-amber-400 mb-2 drop-shadow-lg">Prost!</p>
+            <Lottie
+              animationData={cheersAnimation}
+              loop={false}
+              style={{ width: 280, height: 280 }}
+            />
+          </div>
         </div>
       )}
     </div>

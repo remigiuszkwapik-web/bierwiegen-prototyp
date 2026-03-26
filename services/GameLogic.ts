@@ -54,10 +54,6 @@ export const getPlayerPerformanceTag = (player: Player, allPlayers: Player[], ro
   return PERFORMANCE_TAGS.NOVICE;
 };
 
-export const canStartNextRound = (minWeight: number): boolean => {
-  return minWeight >= 280;
-};
-
 /** Wie viele Runden hat ein Spieler gewonnen (= niedrigste Abweichung) */
 export const getRoundWins = (playerId: string, players: Player[], rounds: Round[]): number => {
   return rounds.filter(r => {

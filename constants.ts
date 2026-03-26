@@ -1,10 +1,6 @@
 
 import { PerformanceTag } from './types';
 
-export const MIN_DRINK_DIFF = 30;
-export const MAX_DRINK_DIFF = 100;
-export const MAX_DRINK_RANGE = 500;
-
 export const BOTTLE_SIZES = {
   '0.33': { label: '0,33L (Kleines)', maxWeight: 700,  liquidWeight: 330,  finishedThreshold: 150 },
   '0.5':  { label: '0,5L (Großes)',   maxWeight: 1000, liquidWeight: 500,  finishedThreshold: 200 },

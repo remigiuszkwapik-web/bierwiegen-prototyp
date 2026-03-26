@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.1",
+    "lottie-react": "^2.4.1",
     "react": "^19.2.3",
     "react-dom": "^19.2.3"
   },

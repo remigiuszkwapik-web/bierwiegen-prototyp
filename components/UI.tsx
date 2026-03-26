@@ -13,6 +13,7 @@ export interface PlacementEntry {
   averageDeviation: number;
   penalties: number;
   penaltiesGiven: number;
+  rankChange?: number;
 }
 
 export const PlacementCard: React.FC<{ players: PlacementEntry[]; title?: string }> = ({ players, title = 'Aktuelle Platzierung' }) => (
@@ -24,6 +25,14 @@ export const PlacementCard: React.FC<{ players: PlacementEntry[]; title?: string
           <div className="flex items-center gap-3">
             <span className="font-bungee text-slate-500 text-sm w-6">#{idx + 1}</span>
             <span className="font-bold text-white">{p.name}</span>
+            {p.rankChange !== undefined && p.rankChange !== 0 && (
+              <span className={`text-[10px] font-bold ${p.rankChange > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {p.rankChange > 0 ? `▲${p.rankChange}` : `▼${Math.abs(p.rankChange)}`}
+              </span>
+            )}
+            {p.rankChange === 0 && (
+              <span className="text-[10px] font-bold text-slate-600">—</span>
+            )}
           </div>
           <div className="flex items-center gap-3">
             <span className="text-[10px] font-bold text-slate-500 uppercase">K:{p.penalties} V:{p.penaltiesGiven}</span>
