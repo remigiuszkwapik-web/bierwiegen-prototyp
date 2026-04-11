@@ -5,10 +5,10 @@ import { Game, GameRepository } from '../types';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabase = SUPABASE_URL ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
 export class SupabaseGameRepository {
-  private client = supabase;
+  private client = supabase!;
 
   async saveGame(game: Game): Promise<void> {
     const { error } = await this.client

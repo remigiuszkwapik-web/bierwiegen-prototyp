@@ -10,10 +10,6 @@ export enum GameStatus {
   FINISHED = 'FINISHED'
 }
 
-export enum ViewMode {
-  HOST = 'HOST',
-  PLAYER = 'PLAYER'
-}
 
 export interface Reaction {
   id: string;
@@ -45,7 +41,7 @@ export type BottleSize = '0.33' | '0.5' | '1.0';
 export interface Game {
   id: string;
   gameCode: string;
-  hostId: string; // Neue Spalte
+  hostId: string;
   createdAt: number;
   isFinished: boolean;
   status: GameStatus;
@@ -54,7 +50,7 @@ export interface Game {
   currentRoundIndex: number;
   bottleSize: BottleSize;
   reactions?: Reaction[];
-  declinedHostIds?: string[]; // IDs von Spielern, die Host-Übernahme abgelehnt haben
+  pendingInitialWeights?: Record<string, number>; // playerId → submitted initial weight
 }
 
 export interface GameRepository {
