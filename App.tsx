@@ -453,16 +453,16 @@ const App: React.FC = () => {
                       {tag.icon} {tag.label}
                     </div>
                     <div className="flex items-start gap-1 mb-3">
-                      <div className="grid grid-cols-4 gap-1 flex-1">
-                        <div><div className="text-[9px] text-slate-600 font-bold uppercase">Letzte</div><div className="text-xs font-bungee text-white">{last ?? '—'}{last != null ? 'g' : ''}</div></div>
-                        <div><div className="text-[9px] text-slate-600 font-bold uppercase">Beste</div><div className="text-xs font-bungee text-green-400">{best ?? '—'}{best != null ? 'g' : ''}</div></div>
-                        <div><div className="text-[9px] text-slate-600 font-bold uppercase">Schlecht.</div><div className="text-xs font-bungee text-red-400">{worst ?? '—'}{worst != null ? 'g' : ''}</div></div>
-                        <div><div className="text-[9px] text-slate-600 font-bold uppercase">Siege</div><div className="text-xs font-bungee text-amber-400">{wins}</div></div>
+                      <div className="grid grid-cols-4 gap-1 flex-1 min-w-0">
+                        <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Letzt.</div><div className="text-xs font-bungee text-white">{last ?? '—'}{last != null ? 'g' : ''}</div></div>
+                        <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Beste</div><div className="text-xs font-bungee text-green-400">{best ?? '—'}{best != null ? 'g' : ''}</div></div>
+                        <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Schle.</div><div className="text-xs font-bungee text-red-400">{worst ?? '—'}{worst != null ? 'g' : ''}</div></div>
+                        <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Siege</div><div className="text-xs font-bungee text-amber-400">{wins}</div></div>
                       </div>
                       <div className="w-px self-stretch bg-slate-700 mx-1" />
                       <div className="grid grid-cols-2 gap-1">
-                        <div><div className="text-[9px] text-slate-600 font-bold uppercase">Kassiert</div><div className="text-xs font-bungee text-white">{myPlayer.penalties}</div></div>
-                        <div><div className="text-[9px] text-slate-600 font-bold uppercase">Verteilt</div><div className="text-xs font-bungee text-white">{getPenaltiesGiven(myPlayerId!, game.players, game.rounds)}</div></div>
+                        <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Kass.</div><div className="text-xs font-bungee text-white">{myPlayer.penalties}</div></div>
+                        <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Vert.</div><div className="text-xs font-bungee text-white">{getPenaltiesGiven(myPlayerId!, game.players, game.rounds)}</div></div>
                       </div>
                     </div>
                     {devs.length > 0 && (
@@ -516,20 +516,23 @@ const App: React.FC = () => {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <Input
-                      type="number"
-                      value={weightInput}
-                      onChange={(e) => {
-                        const raw = e.target.value;
-                        const num = parseInt(raw);
-                        if (!raw || isNaN(num)) { setWeightInput(raw); return; }
-                        setWeightInput(Math.min(maxW, Math.max(1, num)).toString());
-                      }}
-                      placeholder="Gewicht in g..."
-                      className="flex-1 text-center font-bungee text-2xl"
-                    />
-                    <span className="text-slate-500 font-bold uppercase text-sm">g</span>
+                  <div className="flex justify-center">
+                    <div className="relative inline-flex items-center">
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        value={weightInput}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          const num = parseInt(raw);
+                          if (!raw || isNaN(num)) { setWeightInput(raw); return; }
+                          setWeightInput(Math.min(maxW, Math.max(1, num)).toString());
+                        }}
+                        placeholder="..."
+                        className="w-36 pr-10 text-center font-bungee text-2xl bg-slate-900/50 border border-slate-700 rounded-2xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-amber-500 text-white placeholder:text-slate-600"
+                      />
+                      <span className="absolute right-3 text-slate-400 font-bungee text-2xl pointer-events-none">G</span>
+                    </div>
                   </div>
                   <Button
                     onClick={() => {
@@ -576,7 +579,23 @@ const App: React.FC = () => {
                     >{val}g</button>
                   ))}
                 </div>
-                <Input type="number" value={drinkAmountInput} onChange={(e) => setDrinkAmountInput(e.target.value)} placeholder="Menge..." className="text-center" />
+                <div className="bg-slate-800 p-4 rounded-xl">
+                  <div className="text-center text-2xl font-bungee text-amber-400 mb-3">
+                    {drinkAmountInput || '30'}g
+                  </div>
+                  <input
+                    type="range"
+                    min={30}
+                    max={100}
+                    value={drinkAmountInput || '30'}
+                    onChange={(e) => setDrinkAmountInput(e.target.value)}
+                    className="w-full accent-amber-500"
+                  />
+                  <div className="flex justify-between text-xs text-slate-500 font-bold mt-1">
+                    <span>30g</span>
+                    <span>100g</span>
+                  </div>
+                </div>
                 <Button
                   onClick={() => {
                     const amount = parseInt(drinkAmountInput);
@@ -612,16 +631,20 @@ const App: React.FC = () => {
         )}
 
         {/* ─── DRINKING ─────────────────────────────────────────────────────── */}
-        {game.status === GameStatus.DRINKING && (
-          <Card className="border-amber-500/50 text-center py-10">
-            <h2 className="text-xs font-bold text-amber-500 uppercase mb-2">Ziel</h2>
-            <div className="text-6xl font-bungee text-white mb-2">{currentRound?.targetWeight}g</div>
-            <p className="text-slate-400 text-[10px] font-bold uppercase mb-6">
-              Noch {(myPlayer?.weights.slice(-1)[0] || 0) - (currentRound?.targetWeight || 0)}g
-            </p>
-            <Button onClick={() => updateGame(p => p ? { ...p, status: GameStatus.WEIGHING_FINAL } : null)} className="w-full py-4 font-bungee">WIEGEN</Button>
-          </Card>
-        )}
+        {game.status === GameStatus.DRINKING && (() => {
+          const myDrinkAmount = (myPlayer?.weights.slice(-1)[0] || 0) - (currentRound?.targetWeight || 0);
+          return (
+            <Card className="border-amber-500/50 text-center py-10">
+              <h2 className="text-xs font-bold text-amber-500 uppercase mb-2">Ziel</h2>
+              <div className="text-6xl font-bungee text-white mb-2">{currentRound?.targetWeight}g</div>
+              <div className="bg-slate-900 rounded-xl px-4 py-3 mb-6 inline-block">
+                <span className="text-[10px] font-bold text-slate-500 uppercase">Trink</span>
+                <div className="text-2xl font-bungee text-amber-400">{myDrinkAmount}g</div>
+              </div>
+              <Button onClick={() => updateGame(p => p ? { ...p, status: GameStatus.WEIGHING_FINAL } : null)} className="w-full py-4 font-bungee">WIEGEN</Button>
+            </Card>
+          );
+        })()}
 
         {/* ─── WEIGHING_FINAL ────────────────────────────────────────────────── */}
         {game.status === GameStatus.WEIGHING_FINAL && (() => {
@@ -635,10 +658,11 @@ const App: React.FC = () => {
               <div className="text-center mb-4">
                 <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Ziel</p>
                 <div className="text-3xl font-bungee text-amber-500">{currentRound?.targetWeight}g</div>
+                <p className="text-[10px] font-bold text-slate-500 uppercase mt-2 mb-0.5">Trink</p>
+                <div className="text-xl font-bungee text-amber-400">
+                  {(myPlayer?.weights.slice(-1)[0] || 0) - (currentRound?.targetWeight || 0)}g
+                </div>
               </div>
-              <p className="text-center text-slate-500 text-xs font-bold uppercase mb-4">
-                {submittedCount}/{game.players.length} eingereicht
-              </p>
               {mySubmitted !== undefined ? (
                 <div className="text-center py-4">
                   <div className="text-4xl font-bungee text-amber-500 mb-2">{mySubmitted}g</div>
@@ -646,20 +670,23 @@ const App: React.FC = () => {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <Input
-                      type="number"
-                      value={weightInput}
-                      onChange={(e) => {
-                        const raw = e.target.value;
-                        const num = parseInt(raw);
-                        if (!raw || isNaN(num)) { setWeightInput(raw); return; }
-                        setWeightInput(Math.min(maxForMe, Math.max(0, num)).toString());
-                      }}
-                      placeholder="Endgewicht in g..."
-                      className="flex-1 text-center font-bungee text-2xl"
-                    />
-                    <span className="text-slate-500 font-bold uppercase text-sm">g</span>
+                  <div className="flex justify-center">
+                    <div className="relative inline-flex items-center">
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        value={weightInput}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          const num = parseInt(raw);
+                          if (!raw || isNaN(num)) { setWeightInput(raw); return; }
+                          setWeightInput(Math.min(maxForMe, Math.max(0, num)).toString());
+                        }}
+                        placeholder="..."
+                        className="w-36 pr-10 text-center font-bungee text-2xl bg-slate-900/50 border border-slate-700 rounded-2xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-amber-500 text-white placeholder:text-slate-600"
+                      />
+                      <span className="absolute right-3 text-slate-400 font-bungee text-2xl pointer-events-none">G</span>
+                    </div>
                   </div>
                   <Button
                     onClick={() => {
@@ -677,16 +704,11 @@ const App: React.FC = () => {
                     }}
                     className="w-full py-4 font-bungee"
                   >EINWIEGEN</Button>
+                  <p className="text-center text-slate-500 text-xs font-bold uppercase">
+                    {submittedCount}/{game.players.length} eingereicht
+                  </p>
                 </div>
               )}
-              <div className="mt-4 space-y-1">
-                {game.players.filter(p => p.id !== myPlayerId).map(p => (
-                  <div key={p.id} className="flex justify-between text-xs text-slate-600 font-bold uppercase px-1">
-                    <span>{p.name}</span>
-                    <span>{currentRound?.finalWeights[p.id] !== undefined ? `${currentRound.finalWeights[p.id]}g ✓` : '...'}</span>
-                  </div>
-                ))}
-              </div>
             </Card>
           );
         })()}
