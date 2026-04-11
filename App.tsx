@@ -373,16 +373,16 @@ const App: React.FC = () => {
                                 {tag.icon} {tag.label}
                               </div>
                               <div className="flex items-start gap-1 mb-3">
-                                <div className="grid grid-cols-4 gap-1 flex-1">
-                                  <div><div className="text-[9px] text-slate-600 font-bold uppercase">Letzte</div><div className="text-xs font-bungee text-white">{last ?? '—'}{last != null ? 'g' : ''}</div></div>
-                                  <div><div className="text-[9px] text-slate-600 font-bold uppercase">Beste</div><div className="text-xs font-bungee text-green-400">{best ?? '—'}{best != null ? 'g' : ''}</div></div>
-                                  <div><div className="text-[9px] text-slate-600 font-bold uppercase">Schlecht.</div><div className="text-xs font-bungee text-red-400">{worst ?? '—'}{worst != null ? 'g' : ''}</div></div>
-                                  <div><div className="text-[9px] text-slate-600 font-bold uppercase">Siege</div><div className="text-xs font-bungee text-amber-400">{wins}</div></div>
+                                <div className="grid grid-cols-4 gap-1 flex-1 min-w-0">
+                                  <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Letzt.</div><div className="text-xs font-bungee text-white">{last ?? '—'}{last != null ? 'g' : ''}</div></div>
+                                  <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Beste</div><div className="text-xs font-bungee text-green-400">{best ?? '—'}{best != null ? 'g' : ''}</div></div>
+                                  <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Schle.</div><div className="text-xs font-bungee text-red-400">{worst ?? '—'}{worst != null ? 'g' : ''}</div></div>
+                                  <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Siege</div><div className="text-xs font-bungee text-amber-400">{wins}</div></div>
                                 </div>
                                 <div className="w-px self-stretch bg-slate-700 mx-1" />
                                 <div className="grid grid-cols-2 gap-1">
-                                  <div><div className="text-[9px] text-slate-600 font-bold uppercase">Kassiert</div><div className="text-xs font-bungee text-white">{vp.penalties}</div></div>
-                                  <div><div className="text-[9px] text-slate-600 font-bold uppercase">Verteilt</div><div className="text-xs font-bungee text-white">{getPenaltiesGiven(viewerPlayerId!, game.players, game.rounds)}</div></div>
+                                  <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Kass.</div><div className="text-xs font-bungee text-white">{vp.penalties}</div></div>
+                                  <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Vert.</div><div className="text-xs font-bungee text-white">{getPenaltiesGiven(viewerPlayerId!, game.players, game.rounds)}</div></div>
                                 </div>
                               </div>
                               {devs.length > 0 && (
