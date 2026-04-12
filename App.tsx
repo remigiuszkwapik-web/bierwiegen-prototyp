@@ -250,7 +250,7 @@ const App: React.FC = () => {
 
   if (!game) {
     return (
-      <div className="h-screen flex flex-col px-6 pt-6 pb-4 relative overflow-hidden">
+      <div className="h-screen flex flex-col px-6 pt-6 pb-52 relative overflow-hidden">
 
         {/* Rising bubbles */}
         <div className="absolute inset-0 pointer-events-none select-none overflow-hidden">
@@ -320,7 +320,7 @@ const App: React.FC = () => {
         </div>
 
         {/* Dev mode — above waves */}
-        <div className="fixed z-20 left-0 right-0 text-center" style={{ bottom: 185 }}>
+        <div className="relative z-20 text-center">
           <button onClick={loadDemoGame} className="text-[10px] text-slate-700 hover:text-slate-500 font-bold uppercase tracking-widest">
             ⚙ Dev Mode
           </button>
