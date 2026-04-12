@@ -251,10 +251,6 @@ const App: React.FC = () => {
   if (!game) {
     return (
       <div className="h-screen flex flex-col px-6 pt-6 pb-4 relative overflow-hidden">
-        {/* Subtle background decoration */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden">
-          <span className="font-bungee text-white opacity-[0.025]" style={{ fontSize: '80vw', lineHeight: 1 }}>W</span>
-        </div>
 
         {/* Rising bubbles */}
         <div className="absolute inset-0 pointer-events-none select-none overflow-hidden">
