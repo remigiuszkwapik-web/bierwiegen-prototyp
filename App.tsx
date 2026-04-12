@@ -71,6 +71,7 @@ const App: React.FC = () => {
   const [drinkAmountInput, setDrinkAmountInput] = useState<string>('');
   const [playerStatsTab, setPlayerStatsTab] = useState<'statistik' | 'strafen'>('statistik');
   const [showCheers, setShowCheers] = useState(false);
+  const [poppedBubbles, setPoppedBubbles] = useState<Set<number>>(new Set());
   
   const gameRef = useRef<Game | null>(null);
   useEffect(() => { gameRef.current = game; }, [game]);
@@ -249,19 +250,103 @@ const App: React.FC = () => {
 
   if (!game) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-4">
-        <Card className="max-w-md w-full text-center py-12">
-          <h1 className="text-5xl font-bungee text-amber-500 mb-2">WIEGEN</h1>
-          <p className="text-slate-400 mb-10 text-lg font-bold uppercase tracking-tighter">Multiplayer</p>
-          <div className="space-y-4">
-            <Button onClick={createGame} className="w-full py-5 text-xl">HOSTEN</Button>
-            <Input placeholder="CODE" value={joinCodeInput} onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())} className="text-center font-bungee text-3xl tracking-widest" />
-            <Button onClick={joinGame} variant="secondary" className="w-full py-4">BEITRETEN</Button>
+      <div className="min-h-screen flex flex-col p-6 relative overflow-hidden">
+        {/* Subtle background decoration */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden">
+          <span className="font-bungee text-white opacity-[0.025]" style={{ fontSize: '80vw', lineHeight: 1 }}>W</span>
+        </div>
+
+        {/* Rising bubbles */}
+        <div className="absolute inset-0 pointer-events-none select-none overflow-hidden">
+          {[
+            { left: '8%',  size: 20, dur: 7,  delay: 0   },
+            { left: '18%', size: 14, dur: 9,  delay: 2.5 },
+            { left: '30%', size: 28, dur: 11, delay: 1   },
+            { left: '43%', size: 18, dur: 8,  delay: 4   },
+            { left: '55%', size: 12, dur: 10, delay: 0.5 },
+            { left: '67%', size: 24, dur: 7,  delay: 3   },
+            { left: '78%', size: 16, dur: 12, delay: 1.5 },
+            { left: '88%', size: 20, dur: 9,  delay: 5   },
+            { left: '23%', size: 10, dur: 13, delay: 6   },
+            { left: '62%', size: 22, dur: 8,  delay: 2   },
+          ].map((b, i) => (
+            <div
+              key={i}
+              onClick={() => setPoppedBubbles(prev => new Set([...prev, i]))}
+              className="absolute bottom-0 rounded-full border border-amber-400 cursor-pointer pointer-events-auto transition-all duration-300"
+              style={{
+                left: b.left,
+                width: b.size,
+                height: b.size,
+                opacity: poppedBubbles.has(i) ? 0 : 0.07,
+                animation: poppedBubbles.has(i) ? 'none' : `bubbleRise ${b.dur}s ease-in ${b.delay}s infinite`,
+              }}
+            />
+          ))}
+        </div>
+
+        <div className="flex-1 flex flex-col items-center justify-start pt-[12vh] relative z-10">
+          {/* Logo */}
+          <div className="text-center mb-8">
+            <h1 className="text-7xl font-bungee text-amber-500 tracking-tight leading-none mb-2">WIEGEN</h1>
+            <p className="text-slate-600 font-bold uppercase tracking-[0.3em] text-xs">Multiplayer · Trinkspiel</p>
           </div>
-          <button onClick={loadDemoGame} className="text-[10px] text-slate-700 hover:text-slate-500 font-bold uppercase tracking-widest mt-4 block mx-auto">
-            ⚙ Dev Mode
-          </button>
-        </Card>
+
+          {/* Actions */}
+          <div className="w-full max-w-xs space-y-4">
+            <button
+              onClick={createGame}
+              className="w-full bg-amber-500 hover:bg-amber-400 active:scale-95 transition-all text-slate-900 rounded-3xl py-6 font-bungee text-xl tracking-wider shadow-xl shadow-amber-500/25"
+            >
+              STARTE EIN SPIEL
+            </button>
+
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-px bg-slate-700" />
+              <span className="text-slate-500 text-xs font-bold uppercase tracking-widest">oder beitreten</span>
+              <div className="flex-1 h-px bg-slate-700" />
+            </div>
+
+            <div className="bg-slate-800/50 border border-slate-700/60 rounded-3xl p-4 space-y-3">
+              <input
+                type="text"
+                value={joinCodeInput}
+                onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
+                onKeyDown={(e) => e.key === 'Enter' && joinGame()}
+                placeholder="CODE"
+                className="w-full bg-transparent text-center font-bungee text-4xl tracking-[0.4em] focus:outline-none text-white placeholder:text-slate-700 py-2"
+              />
+              <Button onClick={joinGame} variant="secondary" className="w-full">BEITRETEN</Button>
+            </div>
+          </div>
+        </div>
+
+        <button onClick={loadDemoGame} className="text-[10px] text-slate-800 hover:text-slate-600 font-bold uppercase tracking-widest mx-auto pb-1 relative z-10">
+          ⚙ Dev Mode
+        </button>
+
+        {/* Wave layers */}
+        <div className="absolute bottom-0 left-0 right-0 h-48 pointer-events-none overflow-hidden">
+          {[
+            { opacity: 0.10, speed: '14s', anim: 'waveMove1', yOffset: 20 },
+            { opacity: 0.07, speed: '10s', anim: 'waveMove2', yOffset: 10 },
+            { opacity: 0.05, speed: '18s', anim: 'waveMove3', yOffset: 0  },
+          ].map((w, i) => (
+            <div key={i} className="absolute bottom-0 left-0" style={{ width: '200%', opacity: w.opacity, animation: `${w.anim} ${w.speed} linear infinite` }}>
+              <svg viewBox="0 0 1440 120" preserveAspectRatio="none" style={{ width: '100%', height: 80 + w.yOffset }}>
+                <path
+                  d={i === 0
+                    ? 'M0,40 C180,80 360,0 540,40 C720,80 900,0 1080,40 C1260,80 1440,0 1440,40 L1440,120 L0,120 Z'
+                    : i === 1
+                    ? 'M0,55 C200,10 400,90 600,55 C800,20 1000,80 1200,55 C1300,40 1380,60 1440,55 L1440,120 L0,120 Z'
+                    : 'M0,30 C150,70 350,10 500,50 C650,90 850,20 1050,50 C1200,75 1350,30 1440,45 L1440,120 L0,120 Z'
+                  }
+                  fill="#f59e0b"
+                />
+              </svg>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }

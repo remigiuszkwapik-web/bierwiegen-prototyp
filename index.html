@@ -24,6 +24,25 @@
           10% { opacity: 1; }
           100% { transform: translateY(-80px) scale(1.5); opacity: 0; }
         }
+        @keyframes waveMove1 {
+          0%   { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+        @keyframes waveMove2 {
+          0%   { transform: translateX(-50%); }
+          100% { transform: translateX(0); }
+        }
+        @keyframes waveMove3 {
+          0%   { transform: translateX(-25%); }
+          100% { transform: translateX(-75%); }
+        }
+        @keyframes bubbleRise {
+          0%   { transform: translateY(0) translateX(0) scale(1); opacity: 0; }
+          10%  { opacity: 1; }
+          50%  { transform: translateY(-45vh) translateX(8px) scale(1.05); }
+          90%  { opacity: 0.6; }
+          100% { transform: translateY(-100vh) translateX(-4px) scale(0.8); opacity: 0; }
+        }
     </style>
 <link rel="stylesheet" href="/index.css">
 </head>
