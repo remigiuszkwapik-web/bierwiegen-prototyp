@@ -36,7 +36,7 @@ export const PlacementCard: React.FC<{ players: PlacementEntry[]; title?: string
           </div>
           <div className="flex items-center gap-3">
             <span className="text-[10px] font-bold text-slate-500 uppercase">K:{p.penalties} V:{p.penaltiesGiven}</span>
-            <span className="font-bungee text-amber-500">{p.averageDeviation}g</span>
+            <span className="font-bungee text-amber-500">{p.averageDeviation} g</span>
           </div>
         </div>
       ))}

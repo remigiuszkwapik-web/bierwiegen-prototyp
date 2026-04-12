@@ -61,21 +61,13 @@ export const getRoundWins = (playerId: string, players: Player[], rounds: Round[
     const playersWithDev = players.filter(p => p.deviations[roundIndex] !== undefined);
     if (playersWithDev.length === 0) return false;
     const minDev = Math.min(...playersWithDev.map(p => p.deviations[roundIndex]));
-    return playersWithDev.find(p => p.deviations[roundIndex] === minDev)?.id === playerId;
+    return playersWithDev.filter(p => p.deviations[roundIndex] === minDev).some(p => p.id === playerId);
   }).length;
 };
 
-/** Wie viele Strafen hat ein Spieler verteilt (= Rundensiege mit Strafvergabe) */
-export const getPenaltiesGiven = (playerId: string, players: Player[], rounds: Round[]): number => {
-  return rounds.filter(r => {
-    if (!r.penaltyTargetId) return false;
-    const roundIndex = r.roundNumber - 1;
-    const playersWithDev = players.filter(p => p.deviations[roundIndex] !== undefined);
-    if (playersWithDev.length === 0) return false;
-    const minDev = Math.min(...playersWithDev.map(p => p.deviations[roundIndex]));
-    const winner = playersWithDev.find(p => p.deviations[roundIndex] === minDev);
-    return winner?.id === playerId;
-  }).length;
+/** Wie viele Strafen hat ein Spieler verteilt */
+export const getPenaltiesGiven = (playerId: string, _players: Player[], rounds: Round[]): number => {
+  return rounds.filter(r => r.penaltyChoices && playerId in r.penaltyChoices).length;
 };
 
 /** Verbesserungstrend: Hat sich der Durchschnitt durch die letzte Runde verbessert? */
