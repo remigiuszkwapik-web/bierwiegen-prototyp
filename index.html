@@ -24,6 +24,16 @@
           10% { opacity: 1; }
           100% { transform: translateY(-80px) scale(1.5); opacity: 0; }
         }
+        :root { --ac: #f59e0b; --ac-h: #fbbf24; --ac-s: rgba(245,158,11,0.25); }
+        .ac-bg   { background-color: var(--ac) !important; }
+        .ac-bg:hover { background-color: var(--ac-h) !important; }
+        .ac-text { color: var(--ac) !important; }
+        .ac-border { border-color: var(--ac) !important; }
+        .ac-shadow { box-shadow: 0 10px 25px -5px var(--ac-s) !important; }
+        .ac-ring:focus { outline: none; box-shadow: 0 0 0 2px var(--ac) !important; }
+        .ac-bg-10 { background-color: var(--ac10) !important; }
+        .ac-bg-20 { background-color: var(--ac20) !important; }
+        .ac-border-30 { border-color: var(--ac30) !important; }
         @keyframes waveMove1 {
           0%   { transform: translateX(0); }
           100% { transform: translateX(-50%); }

@@ -41,6 +41,7 @@ export interface Round {
 }
 
 export type BottleSize = '0.33' | '0.5' | '1.0';
+export type DrinkType = 'beer' | 'water' | 'cola' | 'fanta';
 
 export interface Game {
   id: string;
@@ -53,6 +54,7 @@ export interface Game {
   rounds: Round[];
   currentRoundIndex: number;
   bottleSize: BottleSize;
+  drink?: DrinkType;
   reactions?: Reaction[];
   declinedHostIds?: string[]; // IDs von Spielern, die Host-Übernahme abgelehnt haben
 }

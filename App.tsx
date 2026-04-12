@@ -2,10 +2,10 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Lottie from 'lottie-react';
 import cheersAnimation from './src/assets/cheers.json';
-import { Game, GameStatus, Player, Round, ViewMode, Reaction, BottleSize } from './types';
+import { Game, GameStatus, Player, Round, ViewMode, Reaction, BottleSize, DrinkType } from './types';
 import { SupabaseGameRepository } from './repositories/GameRepository';
 import { Card, Button, Input, BeerProgressBar, FloatingReaction, EmojiBar, PlacementCard } from './components/UI';
-import { BOTTLE_SIZES } from './constants';
+import { BOTTLE_SIZES, DRINK_THEMES } from './constants';
 import {
   calculateAverageDeviation,
   getPlayerPerformanceTag,
@@ -181,6 +181,9 @@ const App: React.FC = () => {
     }
   };
 
+  const theme = DRINK_THEMES[(game?.drink || 'beer') as DrinkType];
+  const themeVars = { '--ac': theme.hex, '--ac-h': theme.hexHover, '--ac-s': theme.hexShadow, '--ac10': theme.hexAlpha10, '--ac20': theme.hexAlpha20, '--ac30': theme.hexAlpha30 } as React.CSSProperties;
+
   const minWeightPlayer = useMemo(() => {
     if (!game || game.players.length === 0) return null;
     return [...game.players].sort((a, b) => (a.weights.slice(-1)[0] || 0) - (b.weights.slice(-1)[0] || 0))[0];
@@ -250,7 +253,7 @@ const App: React.FC = () => {
 
   if (!game) {
     return (
-      <div className="min-h-screen flex flex-col p-6 relative overflow-hidden">
+      <div className="h-screen flex flex-col px-6 pt-6 pb-4 relative overflow-hidden" style={themeVars}>
         {/* Subtle background decoration */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden">
           <span className="font-bungee text-white opacity-[0.025]" style={{ fontSize: '80vw', lineHeight: 1 }}>W</span>
@@ -273,30 +276,34 @@ const App: React.FC = () => {
             <div
               key={i}
               onClick={() => setPoppedBubbles(prev => new Set([...prev, i]))}
-              className="absolute bottom-0 rounded-full border border-amber-400 cursor-pointer pointer-events-auto transition-all duration-300"
+              className="absolute bottom-0 rounded-full cursor-pointer pointer-events-auto transition-all duration-300"
               style={{
                 left: b.left,
                 width: b.size,
                 height: b.size,
-                opacity: poppedBubbles.has(i) ? 0 : 0.07,
+                borderWidth: 1.5,
+                borderStyle: 'solid',
+                borderColor: theme.hex,
+                opacity: poppedBubbles.has(i) ? 0 : 0.18,
                 animation: poppedBubbles.has(i) ? 'none' : `bubbleRise ${b.dur}s ease-in ${b.delay}s infinite`,
               }}
             />
           ))}
         </div>
 
-        <div className="flex-1 flex flex-col items-center justify-start pt-[12vh] relative z-10">
+        {/* Content — vertically centered, no scroll */}
+        <div className="flex-1 flex flex-col items-center justify-center relative z-10 gap-6">
           {/* Logo */}
-          <div className="text-center mb-8">
-            <h1 className="text-7xl font-bungee text-amber-500 tracking-tight leading-none mb-2">WIEGEN</h1>
+          <div className="text-center">
+            <h1 className="text-7xl font-bungee ac-text tracking-tight leading-none mb-1">WIEGEN</h1>
             <p className="text-slate-600 font-bold uppercase tracking-[0.3em] text-xs">Multiplayer · Trinkspiel</p>
           </div>
 
           {/* Actions */}
-          <div className="w-full max-w-xs space-y-4">
+          <div className="w-full max-w-xs space-y-3">
             <button
               onClick={createGame}
-              className="w-full bg-amber-500 hover:bg-amber-400 active:scale-95 transition-all text-slate-900 rounded-3xl py-6 font-bungee text-xl tracking-wider shadow-xl shadow-amber-500/25"
+              className="w-full ac-bg ac-shadow active:scale-95 transition-all text-slate-900 rounded-3xl py-5 font-bungee text-xl tracking-wider shadow-xl"
             >
               STARTE EIN SPIEL
             </button>
@@ -314,26 +321,29 @@ const App: React.FC = () => {
                 onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
                 onKeyDown={(e) => e.key === 'Enter' && joinGame()}
                 placeholder="CODE"
-                className="w-full bg-transparent text-center font-bungee text-4xl tracking-[0.4em] focus:outline-none text-white placeholder:text-slate-700 py-2"
+                className="w-full bg-transparent text-center font-bungee text-4xl tracking-[0.4em] focus:outline-none text-white placeholder:text-slate-700 py-1"
               />
               <Button onClick={joinGame} variant="secondary" className="w-full">BEITRETEN</Button>
             </div>
           </div>
         </div>
 
-        <button onClick={loadDemoGame} className="text-[10px] text-slate-800 hover:text-slate-600 font-bold uppercase tracking-widest mx-auto pb-1 relative z-10">
-          ⚙ Dev Mode
-        </button>
+        {/* Dev mode — above waves */}
+        <div className="relative z-20 text-center mb-14">
+          <button onClick={loadDemoGame} className="text-[10px] text-slate-700 hover:text-slate-500 font-bold uppercase tracking-widest">
+            ⚙ Dev Mode
+          </button>
+        </div>
 
         {/* Wave layers */}
-        <div className="absolute bottom-0 left-0 right-0 h-48 pointer-events-none overflow-hidden">
+        <div className="absolute bottom-0 left-0 right-0 pointer-events-none overflow-hidden" style={{ height: 160 }}>
           {[
-            { opacity: 0.10, speed: '14s', anim: 'waveMove1', yOffset: 20 },
-            { opacity: 0.07, speed: '10s', anim: 'waveMove2', yOffset: 10 },
-            { opacity: 0.05, speed: '18s', anim: 'waveMove3', yOffset: 0  },
+            { opacity: 0.22, speed: '14s', anim: 'waveMove1', yOffset: 20 },
+            { opacity: 0.15, speed: '10s', anim: 'waveMove2', yOffset: 10 },
+            { opacity: 0.10, speed: '18s', anim: 'waveMove3', yOffset: 0  },
           ].map((w, i) => (
             <div key={i} className="absolute bottom-0 left-0" style={{ width: '200%', opacity: w.opacity, animation: `${w.anim} ${w.speed} linear infinite` }}>
-              <svg viewBox="0 0 1440 120" preserveAspectRatio="none" style={{ width: '100%', height: 80 + w.yOffset }}>
+              <svg viewBox="0 0 1440 120" preserveAspectRatio="none" style={{ width: '100%', height: '100%', display: 'block' }}>
                 <path
                   d={i === 0
                     ? 'M0,40 C180,80 360,0 540,40 C720,80 900,0 1080,40 C1260,80 1440,0 1440,40 L1440,120 L0,120 Z'
@@ -341,7 +351,7 @@ const App: React.FC = () => {
                     ? 'M0,55 C200,10 400,90 600,55 C800,20 1000,80 1200,55 C1300,40 1380,60 1440,55 L1440,120 L0,120 Z'
                     : 'M0,30 C150,70 350,10 500,50 C650,90 850,20 1050,50 C1200,75 1350,30 1440,45 L1440,120 L0,120 Z'
                   }
-                  fill="#f59e0b"
+                  fill={theme.hex}
                 />
               </svg>
             </div>
@@ -352,7 +362,7 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className={`min-h-screen${devMode ? ' pb-20' : ''}`}>
+    <div className={`min-h-screen${devMode ? ' pb-20' : ''}`} style={themeVars}>
       {showHandoverDialog && (
         <div className="fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-6 text-center">
           <Card className="max-w-sm border-amber-500">
@@ -393,7 +403,7 @@ const App: React.FC = () => {
                 <BeerProgressBar progress={getDrinkingProgress(myWeight, me.weights[0] || 0, game.bottleSize)} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="font-bungee text-amber-500 text-sm">{me.name}</span>
+                    <span className="font-bungee ac-text text-sm">{me.name}</span>
                     <span className="text-[10px] font-bold text-slate-500 uppercase">(Ich)</span>
                     <button onClick={() => setViewerPlayerId(null)} className="ml-auto text-[10px] text-slate-600 hover:text-slate-400">✕</button>
                   </div>
@@ -418,10 +428,10 @@ const App: React.FC = () => {
       {viewMode === ViewMode.PLAYER ? (
         <div className="p-4 max-w-2xl mx-auto space-y-6">
             {!viewerPlayerId ? (
-                <Card className="mt-20"><h2 className="text-xl font-bungee text-center mb-6">WER BIST DU?</h2><div className="grid gap-2">{game.players.map(p => (<button key={p.id} onClick={() => { setViewerPlayerId(p.id); if(!p.userId) updateGame(prev => prev ? {...prev, players: prev.players.map(pl => pl.id === p.id ? {...pl, userId: myUserId} : pl)} : null); }} className="p-4 bg-slate-900/60 rounded-xl border border-slate-700 font-bold text-left flex justify-between">{p.name} <span className="text-amber-500">→</span></button>))}</div></Card>
+                <Card className="mt-20"><h2 className="text-xl font-bungee text-center mb-6">WER BIST DU?</h2><div className="grid gap-2">{game.players.map(p => (<button key={p.id} onClick={() => { setViewerPlayerId(p.id); if(!p.userId) updateGame(prev => prev ? {...prev, players: prev.players.map(pl => pl.id === p.id ? {...pl, userId: myUserId} : pl)} : null); }} className="p-4 bg-slate-900/60 rounded-xl border border-slate-700 font-bold text-left flex justify-between">{p.name} <span className="ac-text">→</span></button>))}</div></Card>
             ) : (
                 <>
-                    <header className="flex justify-between items-end"><div><p className="text-[10px] text-slate-500 font-bold uppercase">Spieler</p><h1 className="text-2xl font-bungee text-amber-500">{game.players.find(p => p.id === viewerPlayerId)?.name}</h1></div><div className="text-right text-xs font-bold text-slate-500 uppercase">Code: {game.gameCode}</div></header>
+                    <header className="flex justify-between items-end"><div><p className="text-[10px] text-slate-500 font-bold uppercase">Spieler</p><h1 className="text-2xl font-bungee ac-text">{game.players.find(p => p.id === viewerPlayerId)?.name}</h1></div><div className="text-right text-xs font-bold text-slate-500 uppercase">Code: {game.gameCode}</div></header>
                     <Card className="border-slate-700 pb-4">
                       {(() => {
                         const vp = game.players.find(p => p.id === viewerPlayerId)!;
@@ -451,15 +461,15 @@ const App: React.FC = () => {
                               </div>
                               <div className="mb-3">
                                 <div className="flex gap-1 mb-2">
-                                  <button onClick={() => setPlayerStatsTab('statistik')} className={`flex-1 py-1 text-[9px] font-bold uppercase rounded-lg transition-colors ${playerStatsTab === 'statistik' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' : 'bg-slate-800/60 text-slate-500 border border-slate-700'}`}>Statistik</button>
-                                  <button onClick={() => setPlayerStatsTab('strafen')} className={`flex-1 py-1 text-[9px] font-bold uppercase rounded-lg transition-colors ${playerStatsTab === 'strafen' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' : 'bg-slate-800/60 text-slate-500 border border-slate-700'}`}>Strafen</button>
+                                  <button onClick={() => setPlayerStatsTab('statistik')} className={`flex-1 py-1 text-[9px] font-bold uppercase rounded-lg transition-colors ${playerStatsTab === 'statistik' ? 'ac-bg-20 ac-text ac-border-30 border' : 'bg-slate-800/60 text-slate-500 border border-slate-700'}`}>Statistik</button>
+                                  <button onClick={() => setPlayerStatsTab('strafen')} className={`flex-1 py-1 text-[9px] font-bold uppercase rounded-lg transition-colors ${playerStatsTab === 'strafen' ? 'ac-bg-20 ac-text ac-border-30 border' : 'bg-slate-800/60 text-slate-500 border border-slate-700'}`}>Strafen</button>
                                 </div>
                                 <div className="grid grid-cols-4 gap-1">
                                   {playerStatsTab === 'statistik' ? (<>
                                     <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Last</div><div className="text-xs font-bungee text-white">{last != null ? `${last} g` : '—'}</div></div>
                                     <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Best</div><div className="text-xs font-bungee text-green-400">{best != null ? `${best} g` : '—'}</div></div>
                                     <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Highest</div><div className="text-xs font-bungee text-red-400">{worst != null ? `${worst} g` : '—'}</div></div>
-                                    <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Victories</div><div className="text-xs font-bungee text-amber-400">{wins}</div></div>
+                                    <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Victories</div><div className="text-xs font-bungee ac-text">{wins}</div></div>
                                   </>) : (<>
                                     <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Kassiert</div><div className="text-xs font-bungee text-white">{vp.penalties}</div></div>
                                     <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Verteilt</div><div className="text-xs font-bungee text-white">{getPenaltiesGiven(viewerPlayerId!, game.players, game.rounds)}</div></div>
@@ -480,9 +490,9 @@ const App: React.FC = () => {
                                       const tooMuch = finalWeight != null && target != null && finalWeight < target;
                                       return (
                                         <div key={idx} className={`flex-1 rounded px-1 py-1 text-center ${isWin ? 'bg-amber-500/8' : 'bg-slate-900/50'}`}>
-                                          <div className={`text-[8px] font-bold uppercase mb-0.5 ${isWin ? 'text-amber-500/70' : 'text-slate-700'}`}>{isWin ? '★' : `R${idx + 1}`}</div>
+                                          <div className={`text-[8px] font-bold uppercase mb-0.5 ${isWin ? 'ac-text/70' : 'text-slate-700'}`}>{isWin ? '★' : `R${idx + 1}`}</div>
                                           <div className="flex items-center justify-center gap-0.5 leading-none">
-                                            <div className={`text-xs font-bungee ${isWin ? 'text-amber-400/80' : 'text-slate-400'}`}>{dev} g</div>
+                                            <div className={`text-xs font-bungee ${isWin ? 'ac-text/80' : 'text-slate-400'}`}>{dev} g</div>
                                             <div className={`text-[8px] font-bold ${tooLittle ? 'text-red-400/70' : tooMuch ? 'text-blue-400/70' : 'text-green-400/70'}`}>{tooLittle ? '+' : tooMuch ? '-' : '●'}</div>
                                           </div>
                                         </div>
@@ -498,7 +508,7 @@ const App: React.FC = () => {
                     </Card>
                     {game.status === GameStatus.DRINKING && (
                         <Card className="border-amber-500/50 text-center py-10">
-                          <h2 className="text-xs font-bold text-amber-500 uppercase mb-2">Ziel</h2>
+                          <h2 className="text-xs font-bold ac-text uppercase mb-2">Ziel</h2>
                           <div className="text-6xl font-bungee text-white mb-2">{game.rounds.slice(-1)[0]?.targetWeight} g</div>
                           <p className="text-slate-400 text-[10px] font-bold uppercase">Noch {(game.players.find(p => p.id === viewerPlayerId)?.weights.slice(-1)[0] || 0) - (game.rounds.slice(-1)[0]?.targetWeight || 0)} g</p>
                         </Card>
@@ -510,7 +520,7 @@ const App: React.FC = () => {
       ) : (
         <div className="p-4 md:p-8 max-w-2xl mx-auto space-y-8">
             <header className="flex justify-between items-center">
-                <div><h1 className="text-xl font-bungee text-amber-500">HOST MODE</h1><p className="text-[10px] text-slate-500 font-bold uppercase">Code: {game.gameCode}</p></div>
+                <div><h1 className="text-xl font-bungee ac-text">HOST MODE</h1><p className="text-[10px] text-slate-500 font-bold uppercase">Code: {game.gameCode}</p></div>
                 <div className="flex gap-4 items-center">
                   {game.status !== GameStatus.SETUP && game.status !== GameStatus.FINISHED && (
                     <button onClick={goBack} className="text-slate-400 font-bold text-[10px] uppercase">← Zurück</button>
@@ -521,20 +531,48 @@ const App: React.FC = () => {
             </header>
 
             {game.status === GameStatus.SETUP && (
-                <div className="space-y-6">
-                    <Card>
-                      <h2 className="text-lg font-bold mb-4 uppercase">Flaschengröße</h2>
-                      <div className="flex gap-2">
-                        {(Object.entries(BOTTLE_SIZES) as [BottleSize, typeof BOTTLE_SIZES[keyof typeof BOTTLE_SIZES]][]).map(([key, val]) => (
-                          <button
-                            key={key}
-                            onClick={() => updateGame(p => p ? { ...p, bottleSize: key } : null)}
-                            className={`flex-1 py-3 rounded-xl font-bungee border-2 transition-colors text-sm ${game.bottleSize === key ? 'bg-amber-500 border-amber-400 text-slate-900' : 'bg-slate-800 border-slate-700 text-white'}`}
-                          >{val.label}</button>
+                <div className="space-y-3">
+                    <Card className="p-4 space-y-3">
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Getränk</p>
+                        <div className="flex gap-1.5">
+                          {(['beer', 'water', 'cola'] as DrinkType[]).map(key => { const val = DRINK_THEMES[key]; const active = (game.drink || 'beer') === key; return (
+                            <button key={key} onClick={() => updateGame(p => p ? { ...p, drink: key } : null)}
+                              className={`flex-1 py-2 rounded-xl border-2 transition-colors text-center ${active ? 'text-slate-900 border-transparent' : 'bg-slate-800 border-slate-700 text-white'}`}
+                              style={active ? { backgroundColor: val.hex } : {}}>
+                              <div className="text-base">{val.emoji}</div>
+                              <div className="text-[9px] font-bold uppercase">{val.label}</div>
+                            </button>
+                          );})}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Größe</p>
+                        <div className="flex gap-1.5">
+                          {(Object.entries(BOTTLE_SIZES) as [BottleSize, typeof BOTTLE_SIZES[keyof typeof BOTTLE_SIZES]][]).map(([key, val]) => (
+                            <button key={key} onClick={() => updateGame(p => p ? { ...p, bottleSize: key } : null)}
+                              className={`flex-1 py-2 rounded-xl font-bungee border-2 transition-colors text-xs ${game.bottleSize === key ? 'ac-bg text-slate-900 border-transparent' : 'bg-slate-800 border-slate-700 text-white'}`}>
+                              {val.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </Card>
+                    <Card className="p-4 overflow-hidden">
+                      <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Spieler</p>
+                      <div className="flex gap-2 mb-3">
+                        <Input value={newPlayerName} onChange={(e) => setNewPlayerName(e.target.value)} placeholder="Name..." className="flex-1 min-w-0" onKeyPress={(e) => e.key === 'Enter' && (newPlayerName.trim() && updateGame(p => p ? {...p, players: [...p.players, { id: Math.random().toString(36).substr(2, 9), name: newPlayerName.trim(), weights: [], deviations: [], penalties: 0 }]} : null), setNewPlayerName(''))} />
+                        <Button onClick={() => { if(!newPlayerName.trim()) return; updateGame(p => p ? {...p, players: [...p.players, { id: Math.random().toString(36).substr(2, 9), name: newPlayerName.trim(), weights: [], deviations: [], penalties: 0 }]} : null); setNewPlayerName(''); }} className="shrink-0 px-4">Add</Button>
+                      </div>
+                      <div className="space-y-1">
+                        {game.players.map(p => (
+                          <div key={p.id} className="flex justify-between items-center py-2 px-3 bg-slate-900/40 rounded-xl">
+                            <span className="font-bold text-sm">{p.name}</span>
+                            <button onClick={() => updateGame(prev => prev ? { ...prev, players: prev.players.filter(pl => pl.id !== p.id) } : null)} className="text-red-500 text-sm">✕</button>
+                          </div>
                         ))}
                       </div>
                     </Card>
-                    <Card><h2 className="text-lg font-bold mb-4 uppercase">Spieler</h2><div className="flex gap-2 mb-4"><Input value={newPlayerName} onChange={(e) => setNewPlayerName(e.target.value)} placeholder="Name..." className="flex-1" onKeyPress={(e) => e.key === 'Enter' && (newPlayerName.trim() && updateGame(p => p ? {...p, players: [...p.players, { id: Math.random().toString(36).substr(2, 9), name: newPlayerName.trim(), weights: [], deviations: [], penalties: 0 }]} : null), setNewPlayerName(''))} /><Button onClick={() => { if(!newPlayerName.trim()) return; updateGame(p => p ? {...p, players: [...p.players, { id: Math.random().toString(36).substr(2, 9), name: newPlayerName.trim(), weights: [], deviations: [], penalties: 0 }]} : null); setNewPlayerName(''); }}>Add</Button></div><div className="space-y-1">{game.players.map(p => (<div key={p.id} className="flex justify-between p-3 bg-slate-900/40 rounded-xl"><span className="font-bold">{p.name}</span><button onClick={() => updateGame(prev => prev ? { ...prev, players: prev.players.filter(pl => pl.id !== p.id) } : null)} className="text-red-500">✕</button></div>))}</div></Card>
                     <Button onClick={() => updateGame(p => p ? {...p, status: GameStatus.WEIGHING_INITIAL} : null)} disabled={game.players.length < 1} className="w-full py-4 text-xl font-bungee">START</Button>
                 </div>
             )}
@@ -549,14 +587,14 @@ const App: React.FC = () => {
             {game.status === GameStatus.SETTING_TARGET && (
                 <Card className="text-center"><h2 className="text-xl font-bungee mb-6 uppercase">Ziel wählen</h2>
                   <div className="bg-slate-900 p-6 rounded-2xl mb-6">
-                    <div className="text-[10px] font-bold text-amber-500 uppercase mb-1">Entscheider (Leerste Flasche)</div>
+                    <div className="text-[10px] font-bold ac-text uppercase mb-1">Entscheider (Leerste Flasche)</div>
                     <div className="text-xl font-bold text-white mb-4">{minWeightPlayer?.name || '---'}</div>
                     <hr className="border-slate-800 mb-4" />
                     <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">Referenz</div>
                     <div className="text-4xl font-bungee text-white">{minWeightPlayer?.weights.slice(-1)[0]} g</div>
                   </div>
                   <div className="space-y-4">
-                    <div className="flex gap-2">{[30, 50, 100].map(val => <button key={val} onClick={() => setDrinkAmountInput(val.toString())} className={`flex-1 py-3 rounded-xl font-bungee border-2 transition-colors ${drinkAmountInput === val.toString() ? 'bg-amber-500 border-amber-400 text-slate-900' : 'bg-slate-800 border-slate-700'}`}>{val} g</button>)}</div>
+                    <div className="flex gap-2">{[30, 50, 100].map(val => { const active = drinkAmountInput === val.toString(); return <button key={val} onClick={() => setDrinkAmountInput(val.toString())} className={`flex-1 py-3 rounded-xl font-bungee border-2 transition-colors ${active ? 'text-slate-900' : 'bg-slate-800 border-slate-700 text-white'}`} style={active ? { backgroundColor: theme.hex, borderColor: theme.hexHover } : {}}>{val} g</button>; })}</div>
                     <Input type="number" value={drinkAmountInput} onChange={(e) => setDrinkAmountInput(e.target.value)} placeholder="Menge..." className="text-center" />
                     <Button onClick={() => { const amount = parseInt(drinkAmountInput); if(!amount) return; updateGame(prev => { if(!prev) return null; const currentMin = Math.min(...prev.players.map(p => p.weights.slice(-1)[0])); return { ...prev, status: GameStatus.DRINKING, rounds: [...prev.rounds, { roundNumber: prev.rounds.length + 1, targetWeight: currentMin - amount, chooserPlayerId: '', initialWeights: {}, finalWeights: {} }] }; }); setDrinkAmountInput(''); }} className="w-full py-4 font-bungee">RUNDE STARTEN</Button>
                   </div>
@@ -564,11 +602,11 @@ const App: React.FC = () => {
             )}
 
             {game.status === GameStatus.DRINKING && (
-                <Card className="text-center py-12"><h2 className="text-4xl font-bungee mb-4 text-amber-500 uppercase">Prost!</h2><p className="text-slate-500 font-bold uppercase text-xs mb-1">Ziel</p><div className="text-7xl font-bungee text-white mb-10">{game.rounds.slice(-1)[0]?.targetWeight} g</div><Button onClick={() => updateGame(p => p ? {...p, status: GameStatus.WEIGHING_FINAL} : null)} className="w-full py-4 font-bungee">WIEGEN</Button></Card>
+                <Card className="text-center py-12"><h2 className="text-4xl font-bungee mb-4 ac-text uppercase">Prost!</h2><p className="text-slate-500 font-bold uppercase text-xs mb-1">Ziel</p><div className="text-7xl font-bungee text-white mb-10">{game.rounds.slice(-1)[0]?.targetWeight} g</div><Button onClick={() => updateGame(p => p ? {...p, status: GameStatus.WEIGHING_FINAL} : null)} className="w-full py-4 font-bungee">WIEGEN</Button></Card>
             )}
 
             {game.status === GameStatus.WEIGHING_FINAL && (
-                <Card><h2 className="text-xl font-bungee text-center mb-4 uppercase">Endwiegen</h2><div className="text-center mb-6"><p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Ziel</p><div className="text-4xl font-bungee text-amber-500">{game.rounds.slice(-1)[0]?.targetWeight} g</div></div><div className="space-y-3 mb-6">{game.players.map(p => { const maxForPlayer = p.weights[0] || (BOTTLE_SIZES[game.bottleSize] ?? BOTTLE_SIZES['0.5']).maxWeight; return (<div key={p.id} className="flex items-center justify-between p-3 bg-slate-900/40 rounded-xl"><div className="font-bold">{p.name}</div><div className="flex items-center gap-2"><Input type="number" value={inputs[p.id] || ''} onChange={(e) => { const raw = e.target.value; const num = parseInt(raw); if (!raw || isNaN(num)) { setInputs({...inputs, [p.id]: raw}); return; } setInputs({...inputs, [p.id]: Math.min(maxForPlayer, Math.max(0, num)).toString()}); }} placeholder="000" className="w-20 text-center font-bungee" /><span className="text-slate-500 text-[10px] font-bold uppercase">g</span></div></div>); })}</div><Button onClick={() => { const invalid = game.players.find(p => { const val = parseInt(inputs[p.id]); const maxForPlayer = p.weights[0] || (BOTTLE_SIZES[game.bottleSize] ?? BOTTLE_SIZES['0.5']).maxWeight; return !inputs[p.id] || isNaN(val) || val < 0 || val > maxForPlayer; }); if (invalid) { alert(`Ungültiger Wert für ${invalid.name}. Max: ${invalid.weights[0] || (BOTTLE_SIZES[game.bottleSize] ?? BOTTLE_SIZES['0.5']).maxWeight} g`); return; } updateGame(prev => { if(!prev) return null; const target = prev.rounds.slice(-1)[0].targetWeight; return { ...prev, status: GameStatus.ROUND_RESULT, players: prev.players.map(p => ({...p, weights: [...p.weights, parseInt(inputs[p.id])], deviations: [...p.deviations, Math.abs(parseInt(inputs[p.id]) - target)]})) }; }); setInputs({}); }} className="w-full py-4 font-bungee">AUSWERTEN</Button></Card>
+                <Card><h2 className="text-xl font-bungee text-center mb-4 uppercase">Endwiegen</h2><div className="text-center mb-6"><p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Ziel</p><div className="text-4xl font-bungee ac-text">{game.rounds.slice(-1)[0]?.targetWeight} g</div></div><div className="space-y-3 mb-6">{game.players.map(p => { const maxForPlayer = p.weights[0] || (BOTTLE_SIZES[game.bottleSize] ?? BOTTLE_SIZES['0.5']).maxWeight; return (<div key={p.id} className="flex items-center justify-between p-3 bg-slate-900/40 rounded-xl"><div className="font-bold">{p.name}</div><div className="flex items-center gap-2"><Input type="number" value={inputs[p.id] || ''} onChange={(e) => { const raw = e.target.value; const num = parseInt(raw); if (!raw || isNaN(num)) { setInputs({...inputs, [p.id]: raw}); return; } setInputs({...inputs, [p.id]: Math.min(maxForPlayer, Math.max(0, num)).toString()}); }} placeholder="000" className="w-20 text-center font-bungee" /><span className="text-slate-500 text-[10px] font-bold uppercase">g</span></div></div>); })}</div><Button onClick={() => { const invalid = game.players.find(p => { const val = parseInt(inputs[p.id]); const maxForPlayer = p.weights[0] || (BOTTLE_SIZES[game.bottleSize] ?? BOTTLE_SIZES['0.5']).maxWeight; return !inputs[p.id] || isNaN(val) || val < 0 || val > maxForPlayer; }); if (invalid) { alert(`Ungültiger Wert für ${invalid.name}. Max: ${invalid.weights[0] || (BOTTLE_SIZES[game.bottleSize] ?? BOTTLE_SIZES['0.5']).maxWeight} g`); return; } updateGame(prev => { if(!prev) return null; const target = prev.rounds.slice(-1)[0].targetWeight; return { ...prev, status: GameStatus.ROUND_RESULT, players: prev.players.map(p => ({...p, weights: [...p.weights, parseInt(inputs[p.id])], deviations: [...p.deviations, Math.abs(parseInt(inputs[p.id]) - target)]})) }; }); setInputs({}); }} className="w-full py-4 font-bungee">AUSWERTEN</Button></Card>
             )}
 
             {game.status === GameStatus.ROUND_RESULT && (() => {
@@ -597,7 +635,7 @@ const App: React.FC = () => {
                                         <div className="flex items-center gap-2">
                                             <span className="font-bold">{p.name}</span>
                                             {isWinner && <span className="text-[10px] font-bold uppercase text-green-500 bg-green-500/20 px-2 py-0.5 rounded">Rundensieger</span>}
-                                            {isLoser && <span className="text-[10px] font-bold uppercase text-amber-500 bg-amber-500/20 px-2 py-0.5 rounded">Rundenverlierer</span>}
+                                            {isLoser && <span className="text-[10px] font-bold uppercase ac-text bg-amber-500/20 px-2 py-0.5 rounded">Rundenverlierer</span>}
                                         </div>
                                         <div className="text-right">
                                             <div className={`font-bungee text-xl ${diff === 0 ? 'text-green-400' : isAbove ? 'text-red-400' : 'text-blue-400'}`}>{isAbove ? '+' : ''}{diff} g</div>
@@ -641,7 +679,7 @@ const App: React.FC = () => {
                                 const targetId = penaltyChoices[winner.id];
                                 const target = game.players.find(p => p.id === targetId);
                                 return (
-                                    <p key={winner.id} className="text-center text-sm font-bold uppercase text-amber-500">
+                                    <p key={winner.id} className="text-center text-sm font-bold uppercase ac-text">
                                         {winner.name} → Strafe an {target?.name}
                                     </p>
                                 );
@@ -676,14 +714,14 @@ const App: React.FC = () => {
             })()}
 
             {game.status === GameStatus.FINISHED && (
-                <Card className="text-center py-10"><div className="text-6xl mb-4">🏆</div><h2 className="text-3xl font-bungee text-amber-500 mb-8 uppercase">Finale</h2><div className="space-y-2 mb-8">{[...game.players].sort((a, b) => calculateAverageDeviation(a.deviations) - calculateAverageDeviation(b.deviations)).map((p, idx) => (<div key={p.id} className="p-4 rounded-xl border border-slate-800 bg-slate-900/60 flex items-center justify-between"><div className="font-bungee text-slate-600">#{idx + 1}</div><div className="font-bold">{p.name}</div><div className="font-bungee">{calculateAverageDeviation(p.deviations)} g</div></div>))}</div><Button onClick={() => updateGame(() => null)} className="w-full py-4 font-bungee">MENÜ</Button></Card>
+                <Card className="text-center py-10"><div className="text-6xl mb-4">🏆</div><h2 className="text-3xl font-bungee ac-text mb-8 uppercase">Finale</h2><div className="space-y-2 mb-8">{[...game.players].sort((a, b) => calculateAverageDeviation(a.deviations) - calculateAverageDeviation(b.deviations)).map((p, idx) => (<div key={p.id} className="p-4 rounded-xl border border-slate-800 bg-slate-900/60 flex items-center justify-between"><div className="font-bungee text-slate-600">#{idx + 1}</div><div className="font-bold">{p.name}</div><div className="font-bungee">{calculateAverageDeviation(p.deviations)} g</div></div>))}</div><Button onClick={() => updateGame(() => null)} className="w-full py-4 font-bungee">MENÜ</Button></Card>
             )}
         </div>
       )}
       {/* ─── DEV PANEL ─────────────────────────────────────────────── */}
       {devMode && (
         <div className="fixed bottom-0 left-0 right-0 z-50 bg-slate-950/95 border-t border-amber-500/30 backdrop-blur-sm px-3 py-2 flex items-center gap-2 flex-wrap">
-          <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest shrink-0">⚙ DEV</span>
+          <span className="text-[10px] font-bold ac-text uppercase tracking-widest shrink-0">⚙ DEV</span>
           <div className="w-px h-4 bg-slate-700 shrink-0" />
           <div className="flex gap-1 flex-wrap flex-1">
             <button
@@ -709,7 +747,7 @@ const App: React.FC = () => {
       {showCheers && (
         <div className="fixed inset-0 z-50 pointer-events-none flex items-center justify-center">
           <div className="flex flex-col items-center bg-slate-800/30 backdrop-blur-md border border-slate-700 rounded-3xl p-8 shadow-xl">
-            <p className="text-6xl font-bungee text-amber-400 mb-2 drop-shadow-lg">Prost!</p>
+            <p className="text-6xl font-bungee ac-text mb-2 drop-shadow-lg">Prost!</p>
             <Lottie
               animationData={cheersAnimation}
               loop={false}

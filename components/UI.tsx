@@ -36,7 +36,7 @@ export const PlacementCard: React.FC<{ players: PlacementEntry[]; title?: string
           </div>
           <div className="flex items-center gap-3">
             <span className="text-[10px] font-bold text-slate-500 uppercase">K:{p.penalties} V:{p.penaltiesGiven}</span>
-            <span className="font-bungee text-amber-500">{p.averageDeviation} g</span>
+            <span className="font-bungee ac-text">{p.averageDeviation} g</span>
           </div>
         </div>
       ))}
@@ -102,7 +102,7 @@ export const Button: React.FC<{
   className?: string;
 }> = ({ children, onClick, variant = 'primary', disabled = false, className = '' }) => {
   const variants = {
-    primary: 'bg-amber-500 hover:bg-amber-400 text-slate-900 shadow-lg shadow-amber-500/20',
+    primary: 'ac-bg ac-shadow text-slate-900 shadow-lg',
     secondary: 'bg-slate-700 hover:bg-slate-600 text-white',
     danger: 'bg-red-500 hover:bg-red-400 text-white',
     ghost: 'bg-transparent hover:bg-white/10 text-slate-300'

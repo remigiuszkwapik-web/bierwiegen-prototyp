@@ -1,5 +1,12 @@
 
-import { PerformanceTag } from './types';
+import { DrinkType, PerformanceTag } from './types';
+
+export const DRINK_THEMES: Record<DrinkType, { label: string; emoji: string; hex: string; hexHover: string; hexShadow: string; hexAlpha10: string; hexAlpha20: string; hexAlpha30: string }> = {
+  beer:  { label: 'Bier',   emoji: '🍺', hex: '#f59e0b', hexHover: '#fbbf24', hexShadow: 'rgba(245,158,11,0.25)', hexAlpha10: 'rgba(245,158,11,0.10)', hexAlpha20: 'rgba(245,158,11,0.20)', hexAlpha30: 'rgba(245,158,11,0.30)' },
+  water: { label: 'Wasser', emoji: '💧', hex: '#38bdf8', hexHover: '#7dd3fc', hexShadow: 'rgba(56,189,248,0.25)',  hexAlpha10: 'rgba(56,189,248,0.10)',  hexAlpha20: 'rgba(56,189,248,0.20)',  hexAlpha30: 'rgba(56,189,248,0.30)'  },
+  cola:  { label: 'Cola',   emoji: '🥤', hex: '#d4883c', hexHover: '#e09a50', hexShadow: 'rgba(212,136,60,0.25)',  hexAlpha10: 'rgba(212,136,60,0.10)',  hexAlpha20: 'rgba(212,136,60,0.20)',  hexAlpha30: 'rgba(212,136,60,0.30)'  },
+  fanta: { label: 'Fanta',  emoji: '🍊', hex: '#f97316', hexHover: '#fb923c', hexShadow: 'rgba(249,115,22,0.25)',  hexAlpha10: 'rgba(249,115,22,0.10)',  hexAlpha20: 'rgba(249,115,22,0.20)',  hexAlpha30: 'rgba(249,115,22,0.30)'  }, // reserved
+};
 
 export const BOTTLE_SIZES = {
   '0.33': { label: '0,33L (Kleines)', maxWeight: 700,  liquidWeight: 330,  finishedThreshold: 150 },

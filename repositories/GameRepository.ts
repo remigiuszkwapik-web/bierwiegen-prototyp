@@ -21,6 +21,7 @@ export class SupabaseGameRepository {
         rounds: game.rounds,
         current_round_index: game.currentRoundIndex,
         bottle_size: game.bottleSize || '0.5',
+        drink: game.drink || 'beer',
         reactions: game.reactions || [],
         declined_host_ids: game.declinedHostIds || []
       }, { onConflict: 'game_code' });
@@ -50,6 +51,7 @@ export class SupabaseGameRepository {
       rounds: data.rounds,
       currentRoundIndex: data.current_round_index,
       bottleSize: data.bottle_size || '0.5',
+      drink: data.drink || 'beer',
       reactions: data.reactions || [],
       declinedHostIds: data.declined_host_ids || [],
       createdAt: new Date(data.created_at).getTime(),
@@ -106,6 +108,7 @@ export class SupabaseGameRepository {
           rounds: data.rounds,
           currentRoundIndex: data.current_round_index,
           bottleSize: data.bottle_size || '0.5',
+          drink: data.drink || 'beer',
           reactions: data.reactions || [],
           declinedHostIds: data.declined_host_ids || [],
           createdAt: new Date(data.created_at).getTime(),
