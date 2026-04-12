@@ -281,10 +281,8 @@ const App: React.FC = () => {
                 left: b.left,
                 width: b.size,
                 height: b.size,
-                borderWidth: 1.5,
-                borderStyle: 'solid',
-                borderColor: theme.hex,
-                opacity: poppedBubbles.has(i) ? 0 : 0.18,
+                backgroundColor: theme.hex,
+                opacity: poppedBubbles.has(i) ? 0 : 0.20,
                 animation: poppedBubbles.has(i) ? 'none' : `bubbleRise ${b.dur}s ease-in ${b.delay}s infinite`,
               }}
             />
@@ -336,20 +334,20 @@ const App: React.FC = () => {
         </div>
 
         {/* Wave layers */}
-        <div className="absolute bottom-0 left-0 right-0 pointer-events-none overflow-hidden" style={{ height: 160 }}>
+        <div className="absolute left-0 right-0 pointer-events-none" style={{ bottom: -4, height: 164 }}>
           {[
-            { opacity: 0.22, speed: '14s', anim: 'waveMove1', yOffset: 20 },
-            { opacity: 0.15, speed: '10s', anim: 'waveMove2', yOffset: 10 },
-            { opacity: 0.10, speed: '18s', anim: 'waveMove3', yOffset: 0  },
+            { opacity: 0.22, speed: '14s', anim: 'waveMove1' },
+            { opacity: 0.15, speed: '10s', anim: 'waveMove2' },
+            { opacity: 0.10, speed: '18s', anim: 'waveMove3' },
           ].map((w, i) => (
             <div key={i} className="absolute bottom-0 left-0" style={{ width: '200%', opacity: w.opacity, animation: `${w.anim} ${w.speed} linear infinite` }}>
-              <svg viewBox="0 0 1440 120" preserveAspectRatio="none" style={{ width: '100%', height: '100%', display: 'block' }}>
+              <svg viewBox="0 0 1440 164" preserveAspectRatio="none" style={{ width: '100%', height: '100%', display: 'block' }}>
                 <path
                   d={i === 0
-                    ? 'M0,40 C180,80 360,0 540,40 C720,80 900,0 1080,40 C1260,80 1440,0 1440,40 L1440,120 L0,120 Z'
+                    ? 'M0,40 C180,80 360,0 540,40 C720,80 900,0 1080,40 C1260,80 1440,0 1440,40 L1440,164 L0,164 Z'
                     : i === 1
-                    ? 'M0,55 C200,10 400,90 600,55 C800,20 1000,80 1200,55 C1300,40 1380,60 1440,55 L1440,120 L0,120 Z'
-                    : 'M0,30 C150,70 350,10 500,50 C650,90 850,20 1050,50 C1200,75 1350,30 1440,45 L1440,120 L0,120 Z'
+                    ? 'M0,55 C200,10 400,90 600,55 C800,20 1000,80 1200,55 C1300,40 1380,60 1440,55 L1440,164 L0,164 Z'
+                    : 'M0,30 C150,70 350,10 500,50 C650,90 850,20 1050,50 C1200,75 1350,30 1440,45 L1440,164 L0,164 Z'
                   }
                   fill={theme.hex}
                 />
