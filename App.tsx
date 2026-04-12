@@ -381,10 +381,10 @@ const App: React.FC = () => {
                                 </div>
                                 <div className="grid grid-cols-4 gap-1">
                                   {playerStatsTab === 'statistik' ? (<>
-                                    <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Letzte</div><div className="text-xs font-bungee text-white">{last != null ? `${last} g` : '—'}</div></div>
-                                    <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Beste</div><div className="text-xs font-bungee text-green-400">{best != null ? `${best} g` : '—'}</div></div>
-                                    <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Schwächste</div><div className="text-xs font-bungee text-red-400">{worst != null ? `${worst} g` : '—'}</div></div>
-                                    <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Siege</div><div className="text-xs font-bungee text-amber-400">{wins}</div></div>
+                                    <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Last</div><div className="text-xs font-bungee text-white">{last != null ? `${last} g` : '—'}</div></div>
+                                    <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Best</div><div className="text-xs font-bungee text-green-400">{best != null ? `${best} g` : '—'}</div></div>
+                                    <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Highest</div><div className="text-xs font-bungee text-red-400">{worst != null ? `${worst} g` : '—'}</div></div>
+                                    <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Victories</div><div className="text-xs font-bungee text-amber-400">{wins}</div></div>
                                   </>) : (<>
                                     <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Kassiert</div><div className="text-xs font-bungee text-white">{vp.penalties}</div></div>
                                     <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Verteilt</div><div className="text-xs font-bungee text-white">{getPenaltiesGiven(viewerPlayerId!, game.players, game.rounds)}</div></div>
