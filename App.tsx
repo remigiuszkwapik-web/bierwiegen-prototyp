@@ -71,6 +71,7 @@ const App: React.FC = () => {
   const [drinkAmountInput, setDrinkAmountInput] = useState<string>('');
   const [playerStatsTab, setPlayerStatsTab] = useState<'statistik' | 'strafen'>('statistik');
   const [showCheers, setShowCheers] = useState(false);
+  const [poppedBubbles, setPoppedBubbles] = useState<Set<number>>(new Set());
   
   const gameRef = useRef<Game | null>(null);
   useEffect(() => { gameRef.current = game; }, [game]);
@@ -255,9 +256,38 @@ const App: React.FC = () => {
           <span className="font-bungee text-white opacity-[0.025]" style={{ fontSize: '80vw', lineHeight: 1 }}>W</span>
         </div>
 
-        <div className="flex-1 flex flex-col items-center justify-center relative z-10">
+        {/* Rising bubbles */}
+        <div className="absolute inset-0 pointer-events-none select-none overflow-hidden">
+          {[
+            { left: '8%',  size: 20, dur: 7,  delay: 0   },
+            { left: '18%', size: 14, dur: 9,  delay: 2.5 },
+            { left: '30%', size: 28, dur: 11, delay: 1   },
+            { left: '43%', size: 18, dur: 8,  delay: 4   },
+            { left: '55%', size: 12, dur: 10, delay: 0.5 },
+            { left: '67%', size: 24, dur: 7,  delay: 3   },
+            { left: '78%', size: 16, dur: 12, delay: 1.5 },
+            { left: '88%', size: 20, dur: 9,  delay: 5   },
+            { left: '23%', size: 10, dur: 13, delay: 6   },
+            { left: '62%', size: 22, dur: 8,  delay: 2   },
+          ].map((b, i) => (
+            <div
+              key={i}
+              onClick={() => setPoppedBubbles(prev => new Set([...prev, i]))}
+              className="absolute bottom-0 rounded-full border border-amber-400 cursor-pointer pointer-events-auto transition-all duration-300"
+              style={{
+                left: b.left,
+                width: b.size,
+                height: b.size,
+                opacity: poppedBubbles.has(i) ? 0 : 0.07,
+                animation: poppedBubbles.has(i) ? 'none' : `bubbleRise ${b.dur}s ease-in ${b.delay}s infinite`,
+              }}
+            />
+          ))}
+        </div>
+
+        <div className="flex-1 flex flex-col items-center justify-start pt-[12vh] relative z-10">
           {/* Logo */}
-          <div className="text-center mb-12">
+          <div className="text-center mb-8">
             <h1 className="text-7xl font-bungee text-amber-500 tracking-tight leading-none mb-2">WIEGEN</h1>
             <p className="text-slate-600 font-bold uppercase tracking-[0.3em] text-xs">Multiplayer · Trinkspiel</p>
           </div>
@@ -291,9 +321,32 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        <button onClick={loadDemoGame} className="text-[10px] text-slate-800 hover:text-slate-600 font-bold uppercase tracking-widest mx-auto pb-1">
+        <button onClick={loadDemoGame} className="text-[10px] text-slate-800 hover:text-slate-600 font-bold uppercase tracking-widest mx-auto pb-1 relative z-10">
           ⚙ Dev Mode
         </button>
+
+        {/* Wave layers */}
+        <div className="absolute bottom-0 left-0 right-0 h-48 pointer-events-none overflow-hidden">
+          {[
+            { opacity: 0.10, speed: '14s', anim: 'waveMove1', yOffset: 20 },
+            { opacity: 0.07, speed: '10s', anim: 'waveMove2', yOffset: 10 },
+            { opacity: 0.05, speed: '18s', anim: 'waveMove3', yOffset: 0  },
+          ].map((w, i) => (
+            <div key={i} className="absolute bottom-0 left-0" style={{ width: '200%', opacity: w.opacity, animation: `${w.anim} ${w.speed} linear infinite` }}>
+              <svg viewBox="0 0 1440 120" preserveAspectRatio="none" style={{ width: '100%', height: 80 + w.yOffset }}>
+                <path
+                  d={i === 0
+                    ? 'M0,40 C180,80 360,0 540,40 C720,80 900,0 1080,40 C1260,80 1440,0 1440,40 L1440,120 L0,120 Z'
+                    : i === 1
+                    ? 'M0,55 C200,10 400,90 600,55 C800,20 1000,80 1200,55 C1300,40 1380,60 1440,55 L1440,120 L0,120 Z'
+                    : 'M0,30 C150,70 350,10 500,50 C650,90 850,20 1050,50 C1200,75 1350,30 1440,45 L1440,120 L0,120 Z'
+                  }
+                  fill="#f59e0b"
+                />
+              </svg>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
