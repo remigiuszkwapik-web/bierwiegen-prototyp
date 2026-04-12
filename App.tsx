@@ -404,11 +404,11 @@ const App: React.FC = () => {
                                       const tooLittle = finalWeight != null && target != null && finalWeight > target;
                                       const tooMuch = finalWeight != null && target != null && finalWeight < target;
                                       return (
-                                        <div key={idx} className={`flex-1 rounded-lg px-1 py-1.5 text-center border ${isWin ? 'bg-amber-500/10 border-amber-500/40' : 'bg-slate-800/60 border-slate-700'}`}>
-                                          <div className={`text-[8px] font-bold uppercase mb-0.5 ${isWin ? 'text-amber-500' : 'text-slate-600'}`}>{isWin ? '★' : `R${idx + 1}`}</div>
+                                        <div key={idx} className={`flex-1 rounded px-1 py-1 text-center ${isWin ? 'bg-amber-500/8' : 'bg-slate-900/50'}`}>
+                                          <div className={`text-[8px] font-bold uppercase mb-0.5 ${isWin ? 'text-amber-500/70' : 'text-slate-700'}`}>{isWin ? '★' : `R${idx + 1}`}</div>
                                           <div className="flex items-center justify-center gap-0.5 leading-none">
-                                            <div className={`text-xs font-bungee ${isWin ? 'text-amber-400' : 'text-slate-300'}`}>{dev}g</div>
-                                            <div className={`text-[8px] font-bold ${tooLittle ? 'text-red-400' : tooMuch ? 'text-blue-400' : 'text-green-400'}`}>{tooLittle ? '+' : tooMuch ? '-' : '●'}</div>
+                                            <div className={`text-xs font-bungee ${isWin ? 'text-amber-400/80' : 'text-slate-400'}`}>{dev}g</div>
+                                            <div className={`text-[8px] font-bold ${tooLittle ? 'text-red-400/70' : tooMuch ? 'text-blue-400/70' : 'text-green-400/70'}`}>{tooLittle ? '+' : tooMuch ? '-' : '●'}</div>
                                           </div>
                                         </div>
                                       );
