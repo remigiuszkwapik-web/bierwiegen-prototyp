@@ -102,7 +102,7 @@ export const Button: React.FC<{
   className?: string;
 }> = ({ children, onClick, variant = 'primary', disabled = false, className = '' }) => {
   const variants = {
-    primary: 'bg-amber-500 hover:bg-amber-400 text-slate-900 shadow-lg shadow-amber-500/20',
+    primary: 'ac-bg ac-shadow text-slate-900 shadow-lg',
     secondary: 'bg-slate-700 hover:bg-slate-600 text-white',
     danger: 'bg-red-500 hover:bg-red-400 text-white',
     ghost: 'bg-transparent hover:bg-white/10 text-slate-300'

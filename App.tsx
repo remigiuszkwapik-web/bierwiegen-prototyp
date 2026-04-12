@@ -250,7 +250,7 @@ const App: React.FC = () => {
 
   if (!game) {
     return (
-      <div className="min-h-screen flex flex-col p-6 relative overflow-hidden">
+      <div className="h-screen flex flex-col px-6 pt-6 pb-4 relative overflow-hidden">
         {/* Subtle background decoration */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden">
           <span className="font-bungee text-white opacity-[0.025]" style={{ fontSize: '80vw', lineHeight: 1 }}>W</span>
@@ -273,30 +273,34 @@ const App: React.FC = () => {
             <div
               key={i}
               onClick={() => setPoppedBubbles(prev => new Set([...prev, i]))}
-              className="absolute bottom-0 rounded-full border border-amber-400 cursor-pointer pointer-events-auto transition-all duration-300"
+              className="absolute bottom-0 rounded-full cursor-pointer pointer-events-auto transition-all duration-300"
               style={{
                 left: b.left,
                 width: b.size,
                 height: b.size,
-                opacity: poppedBubbles.has(i) ? 0 : 0.07,
+                borderWidth: 1.5,
+                borderStyle: 'solid',
+                borderColor: '#f59e0b',
+                opacity: poppedBubbles.has(i) ? 0 : 0.18,
                 animation: poppedBubbles.has(i) ? 'none' : `bubbleRise ${b.dur}s ease-in ${b.delay}s infinite`,
               }}
             />
           ))}
         </div>
 
-        <div className="flex-1 flex flex-col items-center justify-start pt-[12vh] relative z-10">
+        {/* Content — vertically centered, no scroll */}
+        <div className="flex-1 flex flex-col items-center justify-center relative z-10 gap-6">
           {/* Logo */}
-          <div className="text-center mb-8">
-            <h1 className="text-7xl font-bungee text-amber-500 tracking-tight leading-none mb-2">WIEGEN</h1>
+          <div className="text-center">
+            <h1 className="text-7xl font-bungee text-amber-500 tracking-tight leading-none mb-1">WIEGEN</h1>
             <p className="text-slate-600 font-bold uppercase tracking-[0.3em] text-xs">Multiplayer · Trinkspiel</p>
           </div>
 
           {/* Actions */}
-          <div className="w-full max-w-xs space-y-4">
+          <div className="w-full max-w-xs space-y-3">
             <button
               onClick={createGame}
-              className="w-full bg-amber-500 hover:bg-amber-400 active:scale-95 transition-all text-slate-900 rounded-3xl py-6 font-bungee text-xl tracking-wider shadow-xl shadow-amber-500/25"
+              className="w-full ac-bg active:scale-95 transition-all text-slate-900 rounded-3xl py-5 font-bungee text-xl tracking-wider shadow-xl"
             >
               STARTE EIN SPIEL
             </button>
@@ -314,26 +318,29 @@ const App: React.FC = () => {
                 onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
                 onKeyDown={(e) => e.key === 'Enter' && joinGame()}
                 placeholder="CODE"
-                className="w-full bg-transparent text-center font-bungee text-4xl tracking-[0.4em] focus:outline-none text-white placeholder:text-slate-700 py-2"
+                className="w-full bg-transparent text-center font-bungee text-4xl tracking-[0.4em] focus:outline-none text-white placeholder:text-slate-700 py-1"
               />
               <Button onClick={joinGame} variant="secondary" className="w-full">BEITRETEN</Button>
             </div>
           </div>
         </div>
 
-        <button onClick={loadDemoGame} className="text-[10px] text-slate-800 hover:text-slate-600 font-bold uppercase tracking-widest mx-auto pb-1 relative z-10">
-          ⚙ Dev Mode
-        </button>
+        {/* Dev mode — above waves */}
+        <div className="relative z-20 text-center mb-14">
+          <button onClick={loadDemoGame} className="text-[10px] text-slate-700 hover:text-slate-500 font-bold uppercase tracking-widest">
+            ⚙ Dev Mode
+          </button>
+        </div>
 
         {/* Wave layers */}
-        <div className="absolute bottom-0 left-0 right-0 h-48 pointer-events-none overflow-hidden">
+        <div className="absolute bottom-0 left-0 right-0 pointer-events-none overflow-hidden" style={{ height: 160 }}>
           {[
-            { opacity: 0.10, speed: '14s', anim: 'waveMove1', yOffset: 20 },
-            { opacity: 0.07, speed: '10s', anim: 'waveMove2', yOffset: 10 },
-            { opacity: 0.05, speed: '18s', anim: 'waveMove3', yOffset: 0  },
+            { opacity: 0.22, speed: '14s', anim: 'waveMove1' },
+            { opacity: 0.15, speed: '10s', anim: 'waveMove2' },
+            { opacity: 0.10, speed: '18s', anim: 'waveMove3' },
           ].map((w, i) => (
             <div key={i} className="absolute bottom-0 left-0" style={{ width: '200%', opacity: w.opacity, animation: `${w.anim} ${w.speed} linear infinite` }}>
-              <svg viewBox="0 0 1440 120" preserveAspectRatio="none" style={{ width: '100%', height: 80 + w.yOffset }}>
+              <svg viewBox="0 0 1440 120" preserveAspectRatio="none" style={{ width: '100%', height: '100%', display: 'block' }}>
                 <path
                   d={i === 0
                     ? 'M0,40 C180,80 360,0 540,40 C720,80 900,0 1080,40 C1260,80 1440,0 1440,40 L1440,120 L0,120 Z'
@@ -521,20 +528,35 @@ const App: React.FC = () => {
             </header>
 
             {game.status === GameStatus.SETUP && (
-                <div className="space-y-6">
-                    <Card>
-                      <h2 className="text-lg font-bold mb-4 uppercase">Flaschengröße</h2>
-                      <div className="flex gap-2">
-                        {(Object.entries(BOTTLE_SIZES) as [BottleSize, typeof BOTTLE_SIZES[keyof typeof BOTTLE_SIZES]][]).map(([key, val]) => (
-                          <button
-                            key={key}
-                            onClick={() => updateGame(p => p ? { ...p, bottleSize: key } : null)}
-                            className={`flex-1 py-3 rounded-xl font-bungee border-2 transition-colors text-sm ${game.bottleSize === key ? 'bg-amber-500 border-amber-400 text-slate-900' : 'bg-slate-800 border-slate-700 text-white'}`}
-                          >{val.label}</button>
+                <div className="space-y-3">
+                    <Card className="p-4 space-y-3">
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Größe</p>
+                        <div className="flex gap-1.5">
+                          {(Object.entries(BOTTLE_SIZES) as [BottleSize, typeof BOTTLE_SIZES[keyof typeof BOTTLE_SIZES]][]).map(([key, val]) => (
+                            <button key={key} onClick={() => updateGame(p => p ? { ...p, bottleSize: key } : null)}
+                              className={`flex-1 py-2 rounded-xl font-bungee border-2 transition-colors text-xs ${game.bottleSize === key ? 'ac-bg text-slate-900 border-transparent' : 'bg-slate-800 border-slate-700 text-white'}`}>
+                              {val.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </Card>
+                    <Card className="p-4 overflow-hidden">
+                      <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Spieler</p>
+                      <div className="flex gap-2 mb-3">
+                        <Input value={newPlayerName} onChange={(e) => setNewPlayerName(e.target.value)} placeholder="Name..." className="flex-1 min-w-0" onKeyPress={(e) => e.key === 'Enter' && (newPlayerName.trim() && updateGame(p => p ? {...p, players: [...p.players, { id: Math.random().toString(36).substr(2, 9), name: newPlayerName.trim(), weights: [], deviations: [], penalties: 0 }]} : null), setNewPlayerName(''))} />
+                        <Button onClick={() => { if(!newPlayerName.trim()) return; updateGame(p => p ? {...p, players: [...p.players, { id: Math.random().toString(36).substr(2, 9), name: newPlayerName.trim(), weights: [], deviations: [], penalties: 0 }]} : null); setNewPlayerName(''); }} className="shrink-0 px-4">Add</Button>
+                      </div>
+                      <div className="space-y-1">
+                        {game.players.map(p => (
+                          <div key={p.id} className="flex justify-between items-center py-2 px-3 bg-slate-900/40 rounded-xl">
+                            <span className="font-bold text-sm">{p.name}</span>
+                            <button onClick={() => updateGame(prev => prev ? { ...prev, players: prev.players.filter(pl => pl.id !== p.id) } : null)} className="text-red-500 text-sm">✕</button>
+                          </div>
                         ))}
                       </div>
                     </Card>
-                    <Card><h2 className="text-lg font-bold mb-4 uppercase">Spieler</h2><div className="flex gap-2 mb-4"><Input value={newPlayerName} onChange={(e) => setNewPlayerName(e.target.value)} placeholder="Name..." className="flex-1" onKeyPress={(e) => e.key === 'Enter' && (newPlayerName.trim() && updateGame(p => p ? {...p, players: [...p.players, { id: Math.random().toString(36).substr(2, 9), name: newPlayerName.trim(), weights: [], deviations: [], penalties: 0 }]} : null), setNewPlayerName(''))} /><Button onClick={() => { if(!newPlayerName.trim()) return; updateGame(p => p ? {...p, players: [...p.players, { id: Math.random().toString(36).substr(2, 9), name: newPlayerName.trim(), weights: [], deviations: [], penalties: 0 }]} : null); setNewPlayerName(''); }}>Add</Button></div><div className="space-y-1">{game.players.map(p => (<div key={p.id} className="flex justify-between p-3 bg-slate-900/40 rounded-xl"><span className="font-bold">{p.name}</span><button onClick={() => updateGame(prev => prev ? { ...prev, players: prev.players.filter(pl => pl.id !== p.id) } : null)} className="text-red-500">✕</button></div>))}</div></Card>
                     <Button onClick={() => updateGame(p => p ? {...p, status: GameStatus.WEIGHING_INITIAL} : null)} disabled={game.players.length < 1} className="w-full py-4 text-xl font-bungee">START</Button>
                 </div>
             )}
