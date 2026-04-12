@@ -347,7 +347,7 @@ const App: React.FC = () => {
             ) : (
                 <>
                     <header className="flex justify-between items-end"><div><p className="text-[10px] text-slate-500 font-bold uppercase">Spieler</p><h1 className="text-2xl font-bungee text-amber-500">{game.players.find(p => p.id === viewerPlayerId)?.name}</h1></div><div className="text-right text-xs font-bold text-slate-500 uppercase">Code: {game.gameCode}</div></header>
-                    <Card className="border-slate-700">
+                    <Card className="border-slate-700 pb-4">
                       {(() => {
                         const vp = game.players.find(p => p.id === viewerPlayerId)!;
                         const devs = vp.deviations;
