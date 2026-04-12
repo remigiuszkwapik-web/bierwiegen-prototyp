@@ -327,7 +327,7 @@ const App: React.FC = () => {
         </div>
 
         {/* Dev mode — above waves */}
-        <div className="relative z-20 text-center mb-14">
+        <div className="fixed z-20 left-0 right-0 text-center" style={{ bottom: 185 }}>
           <button onClick={loadDemoGame} className="text-[10px] text-slate-700 hover:text-slate-500 font-bold uppercase tracking-widest">
             ⚙ Dev Mode
           </button>
