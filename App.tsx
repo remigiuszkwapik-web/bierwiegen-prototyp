@@ -379,19 +379,18 @@ const App: React.FC = () => {
                                   <button onClick={() => setPlayerStatsTab('statistik')} className={`flex-1 py-1 text-[9px] font-bold uppercase rounded-lg transition-colors ${playerStatsTab === 'statistik' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' : 'bg-slate-800/60 text-slate-500 border border-slate-700'}`}>Statistik</button>
                                   <button onClick={() => setPlayerStatsTab('strafen')} className={`flex-1 py-1 text-[9px] font-bold uppercase rounded-lg transition-colors ${playerStatsTab === 'strafen' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' : 'bg-slate-800/60 text-slate-500 border border-slate-700'}`}>Strafen</button>
                                 </div>
-                                {playerStatsTab === 'statistik' ? (
-                                  <div className="grid grid-cols-4 gap-1">
+                                <div className="grid grid-cols-4 gap-1">
+                                  {playerStatsTab === 'statistik' ? (<>
                                     <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Letzte</div><div className="text-xs font-bungee text-white">{last != null ? `${last}g` : '—'}</div></div>
                                     <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Beste</div><div className="text-xs font-bungee text-green-400">{best != null ? `${best}g` : '—'}</div></div>
                                     <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Schwächste</div><div className="text-xs font-bungee text-red-400">{worst != null ? `${worst}g` : '—'}</div></div>
                                     <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Siege</div><div className="text-xs font-bungee text-amber-400">{wins}</div></div>
-                                  </div>
-                                ) : (
-                                  <div className="grid grid-cols-2 gap-2">
-                                    <div className="bg-slate-800/60 rounded-lg px-3 py-2"><div className="text-[9px] text-slate-500 font-bold uppercase mb-0.5">Kassiert</div><div className="text-lg font-bungee text-white">{vp.penalties}</div></div>
-                                    <div className="bg-slate-800/60 rounded-lg px-3 py-2"><div className="text-[9px] text-slate-500 font-bold uppercase mb-0.5">Verteilt</div><div className="text-lg font-bungee text-white">{getPenaltiesGiven(viewerPlayerId!, game.players, game.rounds)}</div></div>
-                                  </div>
-                                )}
+                                  </>) : (<>
+                                    <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Kassiert</div><div className="text-xs font-bungee text-white">{vp.penalties}</div></div>
+                                    <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Verteilt</div><div className="text-xs font-bungee text-white">{getPenaltiesGiven(viewerPlayerId!, game.players, game.rounds)}</div></div>
+                                    <div /><div />
+                                  </>)}
+                                </div>
                               </div>
                               {devs.length > 0 && (
                                 <>
