@@ -37,7 +37,7 @@ export interface Round {
   chooserPlayerId: string;
   initialWeights: Record<string, number>;
   finalWeights: Record<string, number>;
-  penaltyTargetId?: string;
+  penaltyChoices?: Record<string, string>; // winnerId → penaltyTargetId
 }
 
 export type BottleSize = '0.33' | '0.5' | '1.0';

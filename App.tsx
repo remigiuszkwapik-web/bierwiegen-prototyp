@@ -35,8 +35,8 @@ const DEMO_GAME: Game = {
     { id: 'p4', name: 'Lisa', weights: [745, 692, 635], deviations: [8,  15], penalties: 0 },
   ],
   rounds: [
-    { roundNumber: 1, targetWeight: 700, chooserPlayerId: 'p4', initialWeights: {}, finalWeights: {}, penaltyTargetId: 'p2' },
-    { roundNumber: 2, targetWeight: 650, chooserPlayerId: 'p4', initialWeights: {}, finalWeights: {}, penaltyTargetId: 'p3' },
+    { roundNumber: 1, targetWeight: 700, chooserPlayerId: 'p4', initialWeights: {}, finalWeights: {}, penaltyChoices: { 'p1': 'p2' } },
+    { roundNumber: 2, targetWeight: 650, chooserPlayerId: 'p4', initialWeights: {}, finalWeights: {}, penaltyChoices: { 'p4': 'p3' } },
   ],
   currentRoundIndex: 2,
   bottleSize: '0.5',
@@ -69,6 +69,7 @@ const App: React.FC = () => {
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [drinkAmountInput, setDrinkAmountInput] = useState<string>('');
+  const [playerStatsTab, setPlayerStatsTab] = useState<'statistik' | 'strafen'>('statistik');
   const [showCheers, setShowCheers] = useState(false);
   
   const gameRef = useRef<Game | null>(null);
@@ -234,7 +235,8 @@ const App: React.FC = () => {
           return { ...prev, status: GameStatus.DRINKING };
         case GameStatus.ROUND_RESULT: {
           const lastRound = prev.rounds[prev.rounds.length - 1];
-          const penaltyTargetId = lastRound?.penaltyTargetId;
+          const penaltyChoices = lastRound?.penaltyChoices || {};
+          const penaltyTargetIds = Object.values(penaltyChoices);
           return {
             ...prev,
             status: GameStatus.WEIGHING_FINAL,
@@ -242,10 +244,10 @@ const App: React.FC = () => {
               ...p,
               weights: p.weights.slice(0, -1),
               deviations: p.deviations.slice(0, -1),
-              penalties: p.id === penaltyTargetId ? p.penalties - 1 : p.penalties,
+              penalties: p.penalties - penaltyTargetIds.filter(id => id === p.id).length,
             })),
             rounds: prev.rounds.map((r, i) =>
-              i === prev.rounds.length - 1 ? { ...r, penaltyTargetId: undefined } : r
+              i === prev.rounds.length - 1 ? { ...r, penaltyChoices: undefined } : r
             ),
           };
         }
@@ -259,7 +261,7 @@ const App: React.FC = () => {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4">
         <Card className="max-w-md w-full text-center py-12">
-          <h1 className="text-5xl font-bungee text-amber-500 mb-2">BIERWIEGEN</h1>
+          <h1 className="text-5xl font-bungee text-amber-500 mb-2">WIEGEN</h1>
           <p className="text-slate-400 mb-10 text-lg font-bold uppercase tracking-tighter">Multiplayer</p>
           <div className="space-y-4">
             <Button onClick={createGame} className="w-full py-5 text-xl">HOSTEN</Button>
@@ -372,18 +374,24 @@ const App: React.FC = () => {
                               <div className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1 mb-3">
                                 {tag.icon} {tag.label}
                               </div>
-                              <div className="flex items-start gap-1 mb-3">
-                                <div className="grid grid-cols-4 gap-1 flex-1 min-w-0">
-                                  <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Letzt.</div><div className="text-xs font-bungee text-white">{last ?? '—'}{last != null ? 'g' : ''}</div></div>
-                                  <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Beste</div><div className="text-xs font-bungee text-green-400">{best ?? '—'}{best != null ? 'g' : ''}</div></div>
-                                  <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Schle.</div><div className="text-xs font-bungee text-red-400">{worst ?? '—'}{worst != null ? 'g' : ''}</div></div>
-                                  <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Siege</div><div className="text-xs font-bungee text-amber-400">{wins}</div></div>
+                              <div className="mb-3">
+                                <div className="flex gap-1 mb-2">
+                                  <button onClick={() => setPlayerStatsTab('statistik')} className={`flex-1 py-1 text-[9px] font-bold uppercase rounded-lg transition-colors ${playerStatsTab === 'statistik' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' : 'bg-slate-800/60 text-slate-500 border border-slate-700'}`}>Statistik</button>
+                                  <button onClick={() => setPlayerStatsTab('strafen')} className={`flex-1 py-1 text-[9px] font-bold uppercase rounded-lg transition-colors ${playerStatsTab === 'strafen' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' : 'bg-slate-800/60 text-slate-500 border border-slate-700'}`}>Strafen</button>
                                 </div>
-                                <div className="w-px self-stretch bg-slate-700 mx-1" />
-                                <div className="grid grid-cols-2 gap-1">
-                                  <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Kass.</div><div className="text-xs font-bungee text-white">{vp.penalties}</div></div>
-                                  <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Vert.</div><div className="text-xs font-bungee text-white">{getPenaltiesGiven(viewerPlayerId!, game.players, game.rounds)}</div></div>
-                                </div>
+                                {playerStatsTab === 'statistik' ? (
+                                  <div className="grid grid-cols-4 gap-1">
+                                    <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Letzte</div><div className="text-xs font-bungee text-white">{last != null ? `${last}g` : '—'}</div></div>
+                                    <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Beste</div><div className="text-xs font-bungee text-green-400">{best != null ? `${best}g` : '—'}</div></div>
+                                    <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Schwächste</div><div className="text-xs font-bungee text-red-400">{worst != null ? `${worst}g` : '—'}</div></div>
+                                    <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Siege</div><div className="text-xs font-bungee text-amber-400">{wins}</div></div>
+                                  </div>
+                                ) : (
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div className="bg-slate-800/60 rounded-lg px-3 py-2"><div className="text-[9px] text-slate-500 font-bold uppercase mb-0.5">Kassiert</div><div className="text-lg font-bungee text-white">{vp.penalties}</div></div>
+                                    <div className="bg-slate-800/60 rounded-lg px-3 py-2"><div className="text-[9px] text-slate-500 font-bold uppercase mb-0.5">Verteilt</div><div className="text-lg font-bungee text-white">{getPenaltiesGiven(viewerPlayerId!, game.players, game.rounds)}</div></div>
+                                  </div>
+                                )}
                               </div>
                               {devs.length > 0 && (
                                 <>
@@ -491,11 +499,13 @@ const App: React.FC = () => {
 
             {game.status === GameStatus.ROUND_RESULT && (() => {
                 const roundResults = [...game.players].sort((a, b) => (a.deviations.slice(-1)[0] || 0) - (b.deviations.slice(-1)[0] || 0));
-                const roundWinner = roundResults[0];
+                const minDev = roundResults[0] ? (roundResults[0].deviations.slice(-1)[0] || 0) : 0;
+                const roundWinners = roundResults.filter(p => (p.deviations.slice(-1)[0] || 0) === minDev);
                 const roundLoser = roundResults[roundResults.length - 1];
                 const currentRound = game.rounds.slice(-1)[0];
-                const penaltyTargetId = currentRound?.penaltyTargetId;
-                const penaltyTarget = penaltyTargetId ? game.players.find(p => p.id === penaltyTargetId) : null;
+                const penaltyChoices = currentRound?.penaltyChoices || {};
+                const allChosen = roundWinners.every(w => w.id in penaltyChoices);
+                const nextChooser = roundWinners.find(w => !(w.id in penaltyChoices));
                 return (
                 <div className="space-y-4">
                     <Card>
@@ -506,8 +516,8 @@ const App: React.FC = () => {
                                 const final = p.weights.slice(-1)[0];
                                 const diff = final - target;
                                 const isAbove = diff > 0;
-                                const isWinner = idx === 0;
-                                const isLoser = idx === roundResults.length - 1;
+                                const isWinner = roundWinners.some(w => w.id === p.id);
+                                const isLoser = idx === roundResults.length - 1 && !isWinner;
                                 return (
                                     <div key={p.id} className={`p-4 rounded-xl border flex justify-between items-center ${isWinner ? 'bg-green-500/10 border-green-500/30' : 'bg-slate-900/40 border-slate-700'}`}>
                                         <div className="flex items-center gap-2">
@@ -525,9 +535,9 @@ const App: React.FC = () => {
                         </div>
                         <p className="text-slate-400 text-xs mt-4 text-center font-bold uppercase">Der Rundenverlierer trinkt mit dem Strafen-Empfänger einen Kurzen.</p>
                     </Card>
-                    {!penaltyTargetId ? (
+                    {!allChosen ? (
                         <Card className="border-amber-500/50">
-                            <h2 className="text-sm font-bungee text-center mb-2 uppercase">Rundensieger wählt</h2>
+                            <h2 className="text-sm font-bungee text-center mb-2 uppercase">{nextChooser?.name} wählt</h2>
                             <p className="text-slate-400 text-xs text-center mb-4">Strafe an wen?</p>
                             <div className="grid grid-cols-2 gap-2">
                                 {game.players.map(p => (
@@ -535,10 +545,11 @@ const App: React.FC = () => {
                                         key={p.id}
                                         onClick={() => {
                                             const roundIndex = game.rounds.length - 1;
+                                            const chooserId = nextChooser!.id;
                                             updateGame(prev => {
                                                 if (!prev) return null;
                                                 const rounds = [...prev.rounds];
-                                                rounds[roundIndex] = { ...rounds[roundIndex], penaltyTargetId: p.id };
+                                                rounds[roundIndex] = { ...rounds[roundIndex], penaltyChoices: { ...(rounds[roundIndex].penaltyChoices || {}), [chooserId]: p.id } };
                                                 const players = prev.players.map(pl => pl.id === p.id ? { ...pl, penalties: pl.penalties + 1 } : pl);
                                                 return { ...prev, rounds, players };
                                             });
@@ -552,8 +563,16 @@ const App: React.FC = () => {
                         </Card>
                     ) : (
                         <Card className="bg-amber-500/10 border-amber-500/30">
-                            <p className="text-center text-sm font-bold uppercase text-amber-500">Strafe an {penaltyTarget?.name} vergeben</p>
-                            <p className="text-center text-xs text-slate-400 mt-1">{roundLoser?.name} + {penaltyTarget?.name} trinken einen Kurzen.</p>
+                            {roundWinners.map(winner => {
+                                const targetId = penaltyChoices[winner.id];
+                                const target = game.players.find(p => p.id === targetId);
+                                return (
+                                    <p key={winner.id} className="text-center text-sm font-bold uppercase text-amber-500">
+                                        {winner.name} → Strafe an {target?.name}
+                                    </p>
+                                );
+                            })}
+                            <p className="text-center text-xs text-slate-400 mt-1">{roundLoser?.name} trinkt mit den Strafen-Empfängern einen Kurzen.</p>
                         </Card>
                     )}
                     <PlacementCard
@@ -573,7 +592,7 @@ const App: React.FC = () => {
                     />
                     <Button
                         onClick={() => { const currentMin = Math.min(...game.players.map(p => p.weights.slice(-1)[0])); const bottleCfg = BOTTLE_SIZES[game.bottleSize] ?? BOTTLE_SIZES['0.5']; const maxDrunk = Math.max(...game.players.map(p => (p.weights[0] || 0) - p.weights.slice(-1)[0])); const isFinished = currentMin < bottleCfg.finishedThreshold || maxDrunk >= bottleCfg.liquidWeight; updateGame(p => p ? {...p, status: isFinished ? GameStatus.FINISHED : GameStatus.SETTING_TARGET, currentRoundIndex: p.currentRoundIndex + 1} : null); }}
-                        disabled={!penaltyTargetId}
+                        disabled={!allChosen}
                         className="w-full py-4 font-bungee"
                     >
                         NÄCHSTE RUNDE
