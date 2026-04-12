@@ -249,19 +249,51 @@ const App: React.FC = () => {
 
   if (!game) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-4">
-        <Card className="max-w-md w-full text-center py-12">
-          <h1 className="text-5xl font-bungee text-amber-500 mb-2">WIEGEN</h1>
-          <p className="text-slate-400 mb-10 text-lg font-bold uppercase tracking-tighter">Multiplayer</p>
-          <div className="space-y-4">
-            <Button onClick={createGame} className="w-full py-5 text-xl">HOSTEN</Button>
-            <Input placeholder="CODE" value={joinCodeInput} onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())} className="text-center font-bungee text-3xl tracking-widest" />
-            <Button onClick={joinGame} variant="secondary" className="w-full py-4">BEITRETEN</Button>
+      <div className="min-h-screen flex flex-col p-6 relative overflow-hidden">
+        {/* Subtle background decoration */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden">
+          <span className="font-bungee text-white opacity-[0.025]" style={{ fontSize: '80vw', lineHeight: 1 }}>W</span>
+        </div>
+
+        <div className="flex-1 flex flex-col items-center justify-center relative z-10">
+          {/* Logo */}
+          <div className="text-center mb-12">
+            <h1 className="text-7xl font-bungee text-amber-500 tracking-tight leading-none mb-2">WIEGEN</h1>
+            <p className="text-slate-600 font-bold uppercase tracking-[0.3em] text-xs">Multiplayer · Trinkspiel</p>
           </div>
-          <button onClick={loadDemoGame} className="text-[10px] text-slate-700 hover:text-slate-500 font-bold uppercase tracking-widest mt-4 block mx-auto">
-            ⚙ Dev Mode
-          </button>
-        </Card>
+
+          {/* Actions */}
+          <div className="w-full max-w-xs space-y-4">
+            <button
+              onClick={createGame}
+              className="w-full bg-amber-500 hover:bg-amber-400 active:scale-95 transition-all text-slate-900 rounded-3xl py-6 font-bungee text-xl tracking-wider shadow-xl shadow-amber-500/25"
+            >
+              STARTE EIN SPIEL
+            </button>
+
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-px bg-slate-700" />
+              <span className="text-slate-500 text-xs font-bold uppercase tracking-widest">oder beitreten</span>
+              <div className="flex-1 h-px bg-slate-700" />
+            </div>
+
+            <div className="bg-slate-800/50 border border-slate-700/60 rounded-3xl p-4 space-y-3">
+              <input
+                type="text"
+                value={joinCodeInput}
+                onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
+                onKeyDown={(e) => e.key === 'Enter' && joinGame()}
+                placeholder="CODE"
+                className="w-full bg-transparent text-center font-bungee text-4xl tracking-[0.4em] focus:outline-none text-white placeholder:text-slate-700 py-2"
+              />
+              <Button onClick={joinGame} variant="secondary" className="w-full">BEITRETEN</Button>
+            </div>
+          </div>
+        </div>
+
+        <button onClick={loadDemoGame} className="text-[10px] text-slate-800 hover:text-slate-600 font-bold uppercase tracking-widest mx-auto pb-1">
+          ⚙ Dev Mode
+        </button>
       </div>
     );
   }
