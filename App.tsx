@@ -282,7 +282,7 @@ const App: React.FC = () => {
                 width: b.size,
                 height: b.size,
                 backgroundColor: theme.hex,
-                opacity: poppedBubbles.has(i) ? 0 : 0.20,
+                opacity: poppedBubbles.has(i) ? 0 : 0.10,
                 animation: poppedBubbles.has(i) ? 'none' : `bubbleRise ${b.dur}s ease-in ${b.delay}s infinite`,
               }}
             />
@@ -333,21 +333,21 @@ const App: React.FC = () => {
           </button>
         </div>
 
-        {/* Wave layers */}
-        <div className="absolute left-0 right-0 pointer-events-none" style={{ bottom: -4, height: 164 }}>
+        {/* Wave layers — fixed inset-0 so no parent clip creates a visible edge */}
+        <div className="fixed inset-0 pointer-events-none overflow-hidden">
           {[
-            { opacity: 0.22, speed: '14s', anim: 'waveMove1' },
-            { opacity: 0.15, speed: '10s', anim: 'waveMove2' },
-            { opacity: 0.10, speed: '18s', anim: 'waveMove3' },
+            { opacity: 0.22, speed: '8s', anim: 'waveMove1' },
+            { opacity: 0.15, speed: '11s', anim: 'waveMove2' },
+            { opacity: 0.10, speed: '14s', anim: 'waveMove3' },
           ].map((w, i) => (
-            <div key={i} className="absolute bottom-0 left-0" style={{ width: '200%', opacity: w.opacity, animation: `${w.anim} ${w.speed} linear infinite` }}>
-              <svg viewBox="0 0 1440 164" preserveAspectRatio="none" style={{ width: '100%', height: '100%', display: 'block' }}>
+            <div key={i} className="absolute bottom-0 left-0" style={{ width: '200%', height: 280, opacity: w.opacity, animation: `${w.anim} ${w.speed} ease-in-out infinite alternate`, WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 50%)', maskImage: 'linear-gradient(to bottom, transparent 0%, black 50%)' }}>
+              <svg viewBox="0 0 1440 280" preserveAspectRatio="none" style={{ width: '100%', height: '100%', display: 'block' }}>
                 <path
                   d={i === 0
-                    ? 'M0,40 C180,80 360,0 540,40 C720,80 900,0 1080,40 C1260,80 1440,0 1440,40 L1440,164 L0,164 Z'
+                    ? 'M0,120 C180,160 360,80 540,120 C720,160 900,80 1080,120 C1260,160 1440,80 1440,120 L1440,280 L0,280 Z'
                     : i === 1
-                    ? 'M0,55 C200,10 400,90 600,55 C800,20 1000,80 1200,55 C1300,40 1380,60 1440,55 L1440,164 L0,164 Z'
-                    : 'M0,30 C150,70 350,10 500,50 C650,90 850,20 1050,50 C1200,75 1350,30 1440,45 L1440,164 L0,164 Z'
+                    ? 'M0,140 C200,90 400,180 600,140 C800,100 1000,170 1200,140 C1300,120 1380,155 1440,140 L1440,280 L0,280 Z'
+                    : 'M0,100 C150,150 350,70 500,110 C650,150 850,80 1050,115 C1200,145 1350,95 1440,115 L1440,280 L0,280 Z'
                   }
                   fill={theme.hex}
                 />
