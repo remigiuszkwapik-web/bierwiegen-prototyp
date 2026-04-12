@@ -71,29 +71,30 @@ export class SupabaseGameRepository {
     localStorage.removeItem('bierwiegen_last_session');
   }
 
-  getChannel(code: string) {
-    return this.client.channel(`game_room:${code}`);
-  }
+  subscribeToGameRoom(
+    code: string,
+    onUpdate: (game: Game | null) => void,
+    onPresenceSync: (userIds: string[]) => void,
+    myUserId: string
+  ) {
+    const channel = this.client.channel(`game_room:${code}`);
 
-  subscribeToGame(code: string, onUpdate: (game: Game | null) => void) {
-    return this.client
-      .channel(`game_room:${code}`)
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'games', 
-        filter: `game_code=eq.${code}` 
+    channel
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'games',
+        filter: `game_code=eq.${code}`
       }, (payload) => {
-        // Wenn das Spiel gelöscht wurde (eventType DELETE), alle zurück zum Start
         if (payload.eventType === 'DELETE') {
-            onUpdate(null);
-            return;
+          onUpdate(null);
+          return;
         }
-        
+
         const data = payload.new as any;
         if (!data || Object.keys(data).length === 0) {
-            onUpdate(null);
-            return;
+          onUpdate(null);
+          return;
         }
 
         onUpdate({
@@ -111,6 +112,17 @@ export class SupabaseGameRepository {
           isFinished: data.status === 'FINISHED'
         });
       })
-      .subscribe();
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState();
+        const userIds = Object.values(state).flat().map((p: any) => p.userId);
+        onPresenceSync(userIds);
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await channel.track({ userId: myUserId });
+        }
+      });
+
+    return channel;
   }
 }

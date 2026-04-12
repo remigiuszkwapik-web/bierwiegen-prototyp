@@ -93,40 +93,30 @@ const App: React.FC = () => {
     if (!game?.gameCode) return;
     if (devModeRef.current) return; // Kein Supabase in Dev-Modus
 
-    const channel = repo.getChannel(game.gameCode);
-    
-    const subscription = repo.subscribeToGame(game.gameCode, (updatedGame) => {
-      if (!updatedGame) {
+    const channel = repo.subscribeToGameRoom(
+      game.gameCode,
+      (updatedGame) => {
+        if (!updatedGame) {
           setGame(null);
           setViewMode(null);
           setViewerPlayerId(null);
           return;
-      }
-      if (JSON.stringify(gameRef.current) !== JSON.stringify(updatedGame)) {
-        setGame(updatedGame);
-        if (updatedGame.hostId === myUserId && viewMode !== ViewMode.HOST) {
-            setViewMode(ViewMode.HOST);
         }
-      }
-    });
-
-    channel
-      .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState();
-        const userIds = Object.values(state).flat().map((p: any) => p.userId);
-        setPresentUsers(userIds);
-      })
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          await channel.track({ userId: myUserId });
+        if (JSON.stringify(gameRef.current) !== JSON.stringify(updatedGame)) {
+          setGame(updatedGame);
+          if (updatedGame.hostId === myUserId) {
+            setViewMode((prev) => prev !== ViewMode.HOST ? ViewMode.HOST : prev);
+          }
         }
-      });
+      },
+      (userIds) => setPresentUsers(userIds),
+      myUserId
+    );
 
     return () => {
-      subscription.unsubscribe();
       channel.unsubscribe();
     };
-  }, [game?.gameCode, myUserId, viewMode]);
+  }, [game?.gameCode, myUserId]);
 
   const updateGame = useCallback(async (updater: (prev: Game | null) => Game | null) => {
     const prev = gameRef.current;
