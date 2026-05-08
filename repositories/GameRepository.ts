@@ -22,7 +22,7 @@ export class SupabaseGameRepository {
         current_round_index: game.currentRoundIndex,
         bottle_size: game.bottleSize || '0.5',
         reactions: game.reactions || [],
-        declined_host_ids: game.declinedHostIds || []
+        pending_initial_weights: game.pendingInitialWeights || {}
       }, { onConflict: 'game_code' });
 
     if (error) console.error("Supabase Save Error:", error.message);
@@ -51,7 +51,7 @@ export class SupabaseGameRepository {
       currentRoundIndex: data.current_round_index,
       bottleSize: data.bottle_size || '0.5',
       reactions: data.reactions || [],
-      declinedHostIds: data.declined_host_ids || [],
+      pendingInitialWeights: data.pending_initial_weights || {},
       createdAt: new Date(data.created_at).getTime(),
       isFinished: data.status === 'FINISHED'
     };
@@ -71,15 +71,13 @@ export class SupabaseGameRepository {
     localStorage.removeItem('bierwiegen_last_session');
   }
 
-  subscribeToGameRoom(
-    code: string,
-    onUpdate: (game: Game | null) => void,
-    onPresenceSync: (userIds: string[]) => void,
-    myUserId: string
-  ) {
-    const channel = this.client.channel(`game_room:${code}`);
+  getChannel(code: string) {
+    return this.client.channel(`game_room:${code}`);
+  }
 
-    channel
+  subscribeToGame(code: string, onUpdate: (game: Game | null) => void) {
+    return this.client
+      .channel(`game_room:${code}`)
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
@@ -107,22 +105,11 @@ export class SupabaseGameRepository {
           currentRoundIndex: data.current_round_index,
           bottleSize: data.bottle_size || '0.5',
           reactions: data.reactions || [],
-          declinedHostIds: data.declined_host_ids || [],
+          pendingInitialWeights: data.pending_initial_weights || {},
           createdAt: new Date(data.created_at).getTime(),
           isFinished: data.status === 'FINISHED'
         });
       })
-      .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState();
-        const userIds = Object.values(state).flat().map((p: any) => p.userId);
-        onPresenceSync(userIds);
-      })
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          await channel.track({ userId: myUserId });
-        }
-      });
-
-    return channel;
+      .subscribe();
   }
 }

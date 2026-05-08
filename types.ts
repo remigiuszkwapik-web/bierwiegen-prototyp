@@ -10,10 +10,6 @@ export enum GameStatus {
   FINISHED = 'FINISHED'
 }
 
-export enum ViewMode {
-  HOST = 'HOST',
-  PLAYER = 'PLAYER'
-}
 
 export interface Reaction {
   id: string;
@@ -37,7 +33,7 @@ export interface Round {
   chooserPlayerId: string;
   initialWeights: Record<string, number>;
   finalWeights: Record<string, number>;
-  penaltyChoices?: Record<string, string>; // winnerId → penaltyTargetId
+  penaltyTargetId?: string;
 }
 
 export type BottleSize = '0.33' | '0.5' | '1.0';
@@ -54,7 +50,7 @@ export interface Game {
   currentRoundIndex: number;
   bottleSize: BottleSize;
   reactions?: Reaction[];
-  declinedHostIds?: string[]; // IDs von Spielern, die Host-Übernahme abgelehnt haben
+  pendingInitialWeights?: Record<string, number>;
 }
 
 export interface GameRepository {
