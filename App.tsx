@@ -91,9 +91,7 @@ const App: React.FC = () => {
     if (!game?.gameCode) return;
     if (devModeRef.current) return;
 
-    const channel = repo.getChannel(game.gameCode);
-
-    repo.subscribeToGame(game.gameCode, (updatedGame) => {
+    const channel = repo.subscribeToGame(game.gameCode, (updatedGame) => {
       if (!updatedGame) {
         setGame(null);
         setMyPlayerId(null);
@@ -103,8 +101,6 @@ const App: React.FC = () => {
         setGame(updatedGame);
       }
     });
-
-    channel.subscribe();
 
     return () => {
       channel.unsubscribe();

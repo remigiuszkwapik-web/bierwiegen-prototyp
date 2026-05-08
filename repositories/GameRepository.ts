@@ -71,10 +71,6 @@ export class SupabaseGameRepository {
     localStorage.removeItem('bierwiegen_last_session');
   }
 
-  getChannel(code: string) {
-    return this.client.channel(`game_room:${code}`);
-  }
-
   subscribeToGame(code: string, onUpdate: (game: Game | null) => void) {
     return this.client
       .channel(`game_room:${code}`)
