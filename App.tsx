@@ -360,25 +360,12 @@ const App: React.FC = () => {
 
           {/* Actions */}
           <div className="w-full max-w-xs space-y-3">
-            <div className="space-y-2">
-              <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest text-center">Spielmodus</p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setNewGameMode('peer')}
-                  className={`flex-1 py-2.5 rounded-2xl text-xs font-bold uppercase tracking-wider transition-colors ${newGameMode === 'peer' ? 'bg-amber-500 text-slate-900' : 'bg-slate-800/50 text-slate-400 border border-slate-700/60'}`}
-                >Jeder selbst</button>
-                <button
-                  onClick={() => setNewGameMode('host')}
-                  className={`flex-1 py-2.5 rounded-2xl text-xs font-bold uppercase tracking-wider transition-colors ${newGameMode === 'host' ? 'bg-amber-500 text-slate-900' : 'bg-slate-800/50 text-slate-400 border border-slate-700/60'}`}
-                >Host-Mode</button>
-              </div>
-              <button
-                onClick={createGame}
-                className="w-full ac-bg active:scale-95 transition-all text-slate-900 rounded-3xl py-5 font-bungee text-xl tracking-wider shadow-xl"
-              >
-                STARTE EIN SPIEL
-              </button>
-            </div>
+            <button
+              onClick={createGame}
+              className="w-full ac-bg active:scale-95 transition-all text-slate-900 rounded-3xl py-5 font-bungee text-xl tracking-wider shadow-xl"
+            >
+              STARTE EIN SPIEL
+            </button>
 
             <div className="flex items-center gap-3">
               <div className="flex-1 h-px bg-slate-700" />
@@ -452,6 +439,19 @@ const App: React.FC = () => {
           {/* Creator: setup controls */}
           {isCreator && game.status === GameStatus.SETUP && (
             <div className="space-y-4 mb-6">
+              <div>
+                <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Modus</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => updateGame(p => p ? { ...p, mode: 'peer' } : null)}
+                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold uppercase transition-colors ${game.mode !== 'host' ? 'bg-amber-500 text-slate-900' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}
+                  >Jeder selbst</button>
+                  <button
+                    onClick={() => updateGame(p => p ? { ...p, mode: 'host' } : null)}
+                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold uppercase transition-colors ${game.mode === 'host' ? 'bg-amber-500 text-slate-900' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}
+                  >Host-Mode</button>
+                </div>
+              </div>
               <div>
                 <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Flaschengröße</p>
                 <div className="flex gap-2">
