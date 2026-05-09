@@ -566,8 +566,10 @@ const App: React.FC = () => {
             {isCreator && game.status !== GameStatus.SETUP && game.status !== GameStatus.FINISHED && (
               <button onClick={goBack} className="text-slate-400 font-bold text-[10px] uppercase">← Zurück</button>
             )}
-            {isCreator && (
+            {isCreator ? (
               <button onClick={() => { if (window.confirm("Spiel wirklich beenden?")) updateGame(() => null); }} className="text-red-500 font-bold text-[10px] uppercase underline">Beenden</button>
+            ) : (
+              <button onClick={() => { setGame(null); setMyPlayerId(null); localStorage.removeItem('bierwiegen_last_session'); localStorage.removeItem('bierwiegen_player_id'); }} className="text-slate-500 font-bold text-[10px] uppercase">Verlassen</button>
             )}
           </div>
         </header>
