@@ -69,15 +69,20 @@ const App: React.FC = () => {
   const [drinkAmountInput, setDrinkAmountInput] = useState<string>('');
   const [showCheers, setShowCheers] = useState(false);
   const [poppedBubbles, setPoppedBubbles] = useState<Set<number>>(new Set());
+  const [resubscribeKey, setResubscribeKey] = useState(0);
 
   const gameRef = useRef<Game | null>(null);
   useEffect(() => { gameRef.current = game; }, [game]);
 
+  // Fix: Prost-Overlay beim Status-Wechsel weg von DRINKING zurücksetzen
   useEffect(() => {
     if (game?.status === GameStatus.DRINKING) {
       setShowCheers(true);
       const timer = setTimeout(() => setShowCheers(false), 3000);
-      return () => clearTimeout(timer);
+      return () => {
+        clearTimeout(timer);
+        setShowCheers(false);
+      };
     }
   }, [game?.status]);
 
@@ -85,6 +90,47 @@ const App: React.FC = () => {
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
     if (code) setJoinCodeInput(code.toUpperCase());
+  }, []);
+
+  // Session-Persistenz: myPlayerId in localStorage speichern
+  useEffect(() => {
+    if (myPlayerId) {
+      localStorage.setItem('bierwiegen_player_id', myPlayerId);
+    } else {
+      localStorage.removeItem('bierwiegen_player_id');
+    }
+  }, [myPlayerId]);
+
+  // Session-Persistenz: beim Start automatisch wiederherstellen
+  useEffect(() => {
+    if (IS_DEV_PARAM) return;
+    const savedCode = localStorage.getItem('bierwiegen_last_session');
+    const savedPlayerId = localStorage.getItem('bierwiegen_player_id');
+    if (!savedCode) return;
+    repo.loadGame(savedCode).then(loaded => {
+      if (loaded) {
+        setGame(loaded);
+        if (savedPlayerId && loaded.players.some(p => p.id === savedPlayerId)) {
+          setMyPlayerId(savedPlayerId);
+        }
+      } else {
+        localStorage.removeItem('bierwiegen_last_session');
+        localStorage.removeItem('bierwiegen_player_id');
+      }
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reconnect: bei Tab-Wechsel zurück frischen Stand laden + neu subscriben
+  useEffect(() => {
+    const handleVisibility = async () => {
+      if (document.visibilityState === 'visible' && gameRef.current?.gameCode && !devModeRef.current) {
+        const fresh = await repo.loadGame(gameRef.current.gameCode);
+        if (fresh) setGame(fresh);
+        setResubscribeKey(k => k + 1);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, []);
 
   useEffect(() => {
@@ -105,7 +151,7 @@ const App: React.FC = () => {
     return () => {
       channel.unsubscribe();
     };
-  }, [game?.gameCode]);
+  }, [game?.gameCode, resubscribeKey]);
 
   const updateGame = useCallback(async (updater: (prev: Game | null) => Game | null) => {
     const prev = gameRef.current;
