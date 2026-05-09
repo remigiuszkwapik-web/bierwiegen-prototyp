@@ -440,7 +440,13 @@ const App: React.FC = () => {
         <Card className="max-w-md w-full">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-bungee">WER BIST DU?</h2>
-            <span className="text-xs font-bold text-slate-500 uppercase">Code: {game.gameCode}</span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-bold text-slate-500 uppercase">Code: {game.gameCode}</span>
+              <button
+                onClick={() => { setGame(null); setMyPlayerId(null); localStorage.removeItem('bierwiegen_last_session'); localStorage.removeItem('bierwiegen_player_id'); }}
+                className="text-slate-600 font-bold text-[10px] uppercase hover:text-slate-400"
+              >✕ Verlassen</button>
+            </div>
           </div>
 
           {/* Creator: setup controls */}
