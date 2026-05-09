@@ -51,6 +51,7 @@ export interface Game {
   bottleSize: BottleSize;
   reactions?: Reaction[];
   pendingInitialWeights?: Record<string, number>;
+  mode?: 'host' | 'peer';
 }
 
 export interface GameRepository {

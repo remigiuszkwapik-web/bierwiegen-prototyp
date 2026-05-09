@@ -7,6 +7,22 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+const mapData = (data: any): Game => ({
+  id: data.id,
+  gameCode: data.game_code,
+  hostId: data.host_id,
+  status: data.status,
+  players: data.players,
+  rounds: data.rounds,
+  currentRoundIndex: data.current_round_index,
+  bottleSize: data.bottle_size || '0.5',
+  reactions: data.reactions || [],
+  pendingInitialWeights: data.pending_initial_weights || {},
+  mode: (data.mode as 'host' | 'peer') || 'peer',
+  createdAt: new Date(data.created_at).getTime(),
+  isFinished: data.status === 'FINISHED'
+});
+
 export class SupabaseGameRepository {
   private client = supabase;
 
@@ -22,7 +38,8 @@ export class SupabaseGameRepository {
         current_round_index: game.currentRoundIndex,
         bottle_size: game.bottleSize || '0.5',
         reactions: game.reactions || [],
-        pending_initial_weights: game.pendingInitialWeights || {}
+        pending_initial_weights: game.pendingInitialWeights || {},
+        mode: game.mode || 'peer'
       }, { onConflict: 'game_code' });
 
     if (error) console.error("Supabase Save Error:", error.message);
@@ -40,21 +57,7 @@ export class SupabaseGameRepository {
       .maybeSingle();
 
     if (error || !data) return null;
-
-    return {
-      id: data.id,
-      gameCode: data.game_code,
-      hostId: data.host_id,
-      status: data.status,
-      players: data.players,
-      rounds: data.rounds,
-      currentRoundIndex: data.current_round_index,
-      bottleSize: data.bottle_size || '0.5',
-      reactions: data.reactions || [],
-      pendingInitialWeights: data.pending_initial_weights || {},
-      createdAt: new Date(data.created_at).getTime(),
-      isFinished: data.status === 'FINISHED'
-    };
+    return mapData(data);
   }
 
   async deleteGameFromDB(code: string): Promise<void> {
@@ -62,7 +65,7 @@ export class SupabaseGameRepository {
       .from('games')
       .delete()
       .eq('game_code', code);
-    
+
     if (error) console.error("Supabase Delete Error:", error.message);
     localStorage.removeItem('bierwiegen_last_session');
   }
@@ -91,20 +94,7 @@ export class SupabaseGameRepository {
           return;
         }
 
-        onUpdate({
-          id: data.id,
-          gameCode: data.game_code,
-          hostId: data.host_id,
-          status: data.status,
-          players: data.players,
-          rounds: data.rounds,
-          currentRoundIndex: data.current_round_index,
-          bottleSize: data.bottle_size || '0.5',
-          reactions: data.reactions || [],
-          pendingInitialWeights: data.pending_initial_weights || {},
-          createdAt: new Date(data.created_at).getTime(),
-          isFinished: data.status === 'FINISHED'
-        });
+        onUpdate(mapData(data));
       })
       .subscribe();
   }

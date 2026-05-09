@@ -67,6 +67,8 @@ const App: React.FC = () => {
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [weightInput, setWeightInput] = useState<string>('');
   const [drinkAmountInput, setDrinkAmountInput] = useState<string>('');
+  const [inputs, setInputs] = useState<Record<string, string>>({});
+  const [newGameMode, setNewGameMode] = useState<'host' | 'peer'>('peer');
   const [showCheers, setShowCheers] = useState(false);
   const [poppedBubbles, setPoppedBubbles] = useState<Set<number>>(new Set());
   const [resubscribeKey, setResubscribeKey] = useState(0);
@@ -183,6 +185,7 @@ const App: React.FC = () => {
       bottleSize: '0.5',
       reactions: [],
       pendingInitialWeights: {},
+      mode: newGameMode,
     };
     updateGame(() => newGame);
   };
@@ -228,6 +231,7 @@ const App: React.FC = () => {
   const goBack = () => {
     setWeightInput('');
     setDrinkAmountInput('');
+    setInputs({});
     updateGame(prev => {
       if (!prev) return null;
       switch (prev.status) {
@@ -265,9 +269,10 @@ const App: React.FC = () => {
     });
   };
 
-  // Auto-advance WEIGHING_INITIAL when all players submitted
+  // Auto-advance WEIGHING_INITIAL when all players submitted (peer mode only)
   useEffect(() => {
     if (!game || game.status !== GameStatus.WEIGHING_INITIAL) return;
+    if (game.mode === 'host') return;
     const pending = game.pendingInitialWeights ?? {};
     const allSubmitted = game.players.length > 0 && game.players.every(p => pending[p.id] !== undefined);
     if (allSubmitted) {
@@ -284,9 +289,10 @@ const App: React.FC = () => {
     }
   }, [game?.pendingInitialWeights, game?.status, game?.players.length]);
 
-  // Auto-advance WEIGHING_FINAL when all players submitted
+  // Auto-advance WEIGHING_FINAL when all players submitted (peer mode only)
   useEffect(() => {
     if (!game || game.status !== GameStatus.WEIGHING_FINAL) return;
+    if (game.mode === 'host') return;
     const currentRound = game.rounds.slice(-1)[0];
     if (!currentRound) return;
     const allSubmitted = game.players.length > 0 && game.players.every(p => currentRound.finalWeights[p.id] !== undefined);
@@ -354,12 +360,25 @@ const App: React.FC = () => {
 
           {/* Actions */}
           <div className="w-full max-w-xs space-y-3">
-            <button
-              onClick={createGame}
-              className="w-full ac-bg active:scale-95 transition-all text-slate-900 rounded-3xl py-5 font-bungee text-xl tracking-wider shadow-xl"
-            >
-              STARTE EIN SPIEL
-            </button>
+            <div className="space-y-2">
+              <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest text-center">Spielmodus</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setNewGameMode('peer')}
+                  className={`flex-1 py-2.5 rounded-2xl text-xs font-bold uppercase tracking-wider transition-colors ${newGameMode === 'peer' ? 'bg-amber-500 text-slate-900' : 'bg-slate-800/50 text-slate-400 border border-slate-700/60'}`}
+                >Jeder selbst</button>
+                <button
+                  onClick={() => setNewGameMode('host')}
+                  className={`flex-1 py-2.5 rounded-2xl text-xs font-bold uppercase tracking-wider transition-colors ${newGameMode === 'host' ? 'bg-amber-500 text-slate-900' : 'bg-slate-800/50 text-slate-400 border border-slate-700/60'}`}
+                >Host-Mode</button>
+              </div>
+              <button
+                onClick={createGame}
+                className="w-full ac-bg active:scale-95 transition-all text-slate-900 rounded-3xl py-5 font-bungee text-xl tracking-wider shadow-xl"
+              >
+                STARTE EIN SPIEL
+              </button>
+            </div>
 
             <div className="flex items-center gap-3">
               <div className="flex-1 h-px bg-slate-700" />
@@ -627,6 +646,66 @@ const App: React.FC = () => {
         {/* ─── WEIGHING_INITIAL ──────────────────────────────────────────────── */}
         {game.status === GameStatus.WEIGHING_INITIAL && (() => {
           const maxW = (BOTTLE_SIZES[game.bottleSize] ?? BOTTLE_SIZES['0.5']).maxWeight;
+
+          if (game.mode === 'host') {
+            if (isCreator) {
+              return (
+                <Card>
+                  <h2 className="text-xl font-bungee text-center mb-6 uppercase">Initialwiegen</h2>
+                  <div className="space-y-3 mb-6">
+                    {game.players.map(p => (
+                      <div key={p.id} className="flex items-center justify-between p-3 bg-slate-900/40 rounded-xl">
+                        <div className="font-bold">{p.name}</div>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="number"
+                            value={inputs[p.id] || ''}
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              const num = parseInt(raw);
+                              if (!raw || isNaN(num)) { setInputs({ ...inputs, [p.id]: raw }); return; }
+                              setInputs({ ...inputs, [p.id]: Math.min(maxW, Math.max(1, num)).toString() });
+                            }}
+                            placeholder="000"
+                            className="w-20 text-center font-bungee"
+                          />
+                          <span className="text-slate-500 text-[10px] font-bold uppercase">g</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    onClick={() => {
+                      if (!game.players.every(p => inputs[p.id] && parseInt(inputs[p.id]) >= 1 && parseInt(inputs[p.id]) <= maxW)) {
+                        alert(`Bitte gültige Gewichte eingeben (1–${maxW}g)`);
+                        return;
+                      }
+                      updateGame(prev => {
+                        if (!prev) return null;
+                        return {
+                          ...prev,
+                          status: GameStatus.SETTING_TARGET,
+                          players: prev.players.map(p => ({ ...p, weights: [parseInt(inputs[p.id])] })),
+                          pendingInitialWeights: {},
+                        };
+                      });
+                      setInputs({});
+                    }}
+                    className="w-full py-4 font-bungee"
+                  >FERTIG</Button>
+                </Card>
+              );
+            }
+            return (
+              <Card className="text-center py-10">
+                <div className="text-4xl mb-3">⏳</div>
+                <h2 className="text-lg font-bungee mb-2 uppercase">Warte auf Host</h2>
+                <p className="text-slate-400 text-xs font-bold uppercase">Host wiegt alle Flaschen ein...</p>
+              </Card>
+            );
+          }
+
+          // Peer mode
           const pending = game.pendingInitialWeights ?? {};
           const mySubmitted = myPlayerId ? pending[myPlayerId] : undefined;
           const submittedCount = game.players.filter(p => pending[p.id] !== undefined).length;
@@ -678,7 +757,7 @@ const App: React.FC = () => {
                 {game.players.filter(p => p.id !== myPlayerId).map(p => (
                   <div key={p.id} className="flex justify-between text-xs text-slate-600 font-bold uppercase px-1">
                     <span>{p.name}</span>
-                    <span>{(pending)[p.id] !== undefined ? `${pending[p.id]}g ✓` : '...'}</span>
+                    <span>{pending[p.id] !== undefined ? `${pending[p.id]}g ✓` : '...'}</span>
                   </div>
                 ))}
               </div>
@@ -688,7 +767,7 @@ const App: React.FC = () => {
 
         {/* ─── SETTING_TARGET ────────────────────────────────────────────────── */}
         {game.status === GameStatus.SETTING_TARGET && (
-          chooserIsMe ? (
+          (chooserIsMe || (game.mode === 'host' && isCreator)) ? (
             <Card className="text-center">
               <h2 className="text-xl font-bungee mb-2 uppercase">Du bist dran!</h2>
               <p className="text-slate-400 text-xs font-bold uppercase mb-6">Du hast die leerste Flasche – wähle das Ziel</p>
@@ -751,8 +830,12 @@ const App: React.FC = () => {
           ) : (
             <Card className="text-center py-10">
               <div className="text-4xl mb-3">⏳</div>
-              <h2 className="text-lg font-bungee mb-2 uppercase">Warte auf {minWeightPlayer?.name}</h2>
-              <p className="text-slate-400 text-xs font-bold uppercase">{minWeightPlayer?.name} wählt das Ziel für diese Runde</p>
+              <h2 className="text-lg font-bungee mb-2 uppercase">
+                {game.mode === 'host' ? 'Warte auf Host' : `Warte auf ${minWeightPlayer?.name}`}
+              </h2>
+              <p className="text-slate-400 text-xs font-bold uppercase">
+                {game.mode === 'host' ? 'Host wählt das Ziel für diese Runde' : `${minWeightPlayer?.name} wählt das Ziel für diese Runde`}
+              </p>
             </Card>
           )
         )}
@@ -768,14 +851,96 @@ const App: React.FC = () => {
                 <span className="text-[10px] font-bold text-slate-500 uppercase">Trink</span>
                 <div className="text-2xl font-bungee text-amber-400">{myDrinkAmount}g</div>
               </div>
-              <Button onClick={() => updateGame(p => p ? { ...p, status: GameStatus.WEIGHING_FINAL } : null)} className="w-full py-4 font-bungee">WIEGEN</Button>
+              {game.mode === 'host' ? (
+                isCreator
+                  ? <Button onClick={() => updateGame(p => p ? { ...p, status: GameStatus.WEIGHING_FINAL } : null)} className="w-full py-4 font-bungee">WIEGEN</Button>
+                  : <p className="text-slate-500 text-xs font-bold uppercase mt-4">Host startet das Wiegen...</p>
+              ) : (
+                <Button onClick={() => updateGame(p => p ? { ...p, status: GameStatus.WEIGHING_FINAL } : null)} className="w-full py-4 font-bungee">WIEGEN</Button>
+              )}
             </Card>
           );
         })()}
 
         {/* ─── WEIGHING_FINAL ────────────────────────────────────────────────── */}
         {game.status === GameStatus.WEIGHING_FINAL && (() => {
-          const maxForMe = myPlayer?.weights[0] ?? (BOTTLE_SIZES[game.bottleSize] ?? BOTTLE_SIZES['0.5']).maxWeight;
+          const maxW = (BOTTLE_SIZES[game.bottleSize] ?? BOTTLE_SIZES['0.5']).maxWeight;
+
+          if (game.mode === 'host') {
+            if (isCreator) {
+              return (
+                <Card>
+                  <h2 className="text-xl font-bungee text-center mb-4 uppercase">Endwiegen</h2>
+                  <div className="text-center mb-6">
+                    <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Ziel</p>
+                    <div className="text-4xl font-bungee text-amber-500">{currentRound?.targetWeight}g</div>
+                  </div>
+                  <div className="space-y-3 mb-6">
+                    {game.players.map(p => {
+                      const maxForP = p.weights[0] || maxW;
+                      return (
+                        <div key={p.id} className="flex items-center justify-between p-3 bg-slate-900/40 rounded-xl">
+                          <div className="font-bold">{p.name}</div>
+                          <div className="flex items-center gap-2">
+                            <Input
+                              type="number"
+                              value={inputs[p.id] || ''}
+                              onChange={(e) => {
+                                const raw = e.target.value;
+                                const num = parseInt(raw);
+                                if (!raw || isNaN(num)) { setInputs({ ...inputs, [p.id]: raw }); return; }
+                                setInputs({ ...inputs, [p.id]: Math.min(maxForP, Math.max(0, num)).toString() });
+                              }}
+                              placeholder="000"
+                              className="w-20 text-center font-bungee"
+                            />
+                            <span className="text-slate-500 text-[10px] font-bold uppercase">g</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <Button
+                    onClick={() => {
+                      const invalid = game.players.find(p => {
+                        const val = parseInt(inputs[p.id]);
+                        const maxForP = p.weights[0] || maxW;
+                        return !inputs[p.id] || isNaN(val) || val < 0 || val > maxForP;
+                      });
+                      if (invalid) { alert(`Ungültiger Wert für ${invalid.name}`); return; }
+                      updateGame(prev => {
+                        if (!prev) return null;
+                        const target = prev.rounds.slice(-1)[0].targetWeight;
+                        return {
+                          ...prev,
+                          status: GameStatus.ROUND_RESULT,
+                          players: prev.players.map(p => ({
+                            ...p,
+                            weights: [...p.weights, parseInt(inputs[p.id])],
+                            deviations: [...p.deviations, Math.abs(parseInt(inputs[p.id]) - target)],
+                          })),
+                        };
+                      });
+                      setInputs({});
+                    }}
+                    className="w-full py-4 font-bungee"
+                  >AUSWERTEN</Button>
+                </Card>
+              );
+            }
+            return (
+              <Card className="text-center py-10">
+                <div className="text-4xl mb-3">⏳</div>
+                <h2 className="text-lg font-bungee mb-2 uppercase">Warte auf Host</h2>
+                <p className="text-slate-400 text-xs font-bold uppercase">Host wiegt alle Flaschen...</p>
+                <div className="text-3xl font-bungee text-amber-500 mt-6">{currentRound?.targetWeight}g</div>
+                <p className="text-[10px] text-slate-500 font-bold uppercase mt-1">Ziel</p>
+              </Card>
+            );
+          }
+
+          // Peer mode
+          const maxForMe = myPlayer?.weights[0] ?? maxW;
           const mySubmitted = myPlayerId && currentRound ? currentRound.finalWeights[myPlayerId] : undefined;
           const submittedCount = game.players.filter(p => currentRound?.finalWeights[p.id] !== undefined).length;
 
@@ -876,9 +1041,9 @@ const App: React.FC = () => {
                 <p className="text-slate-400 text-xs mt-4 text-center font-bold uppercase">Der Rundenverlierer trinkt mit dem Strafen-Empfänger einen Kurzen.</p>
               </Card>
 
-              {/* Penalty selection – only round winner picks on their device */}
+              {/* Penalty selection – round winner (peer) or host picks */}
               {!penaltyTargetId ? (
-                iAmRoundWinner ? (
+                (iAmRoundWinner || (game.mode === 'host' && isCreator)) ? (
                   <Card className="border-amber-500/50">
                     <h2 className="text-sm font-bungee text-center mb-2 uppercase">Du hast gewonnen!</h2>
                     <p className="text-slate-400 text-xs text-center mb-4">Wem gibst du die Strafe?</p>
@@ -904,7 +1069,9 @@ const App: React.FC = () => {
                 ) : (
                   <Card className="text-center py-6">
                     <div className="text-2xl mb-2">⏳</div>
-                    <p className="text-slate-400 text-xs font-bold uppercase">{roundWinner?.name} vergibt gerade die Strafe...</p>
+                    <p className="text-slate-400 text-xs font-bold uppercase">
+                      {game.mode === 'host' ? 'Host vergibt gerade die Strafe...' : `${roundWinner?.name} vergibt gerade die Strafe...`}
+                    </p>
                   </Card>
                 )
               ) : (
