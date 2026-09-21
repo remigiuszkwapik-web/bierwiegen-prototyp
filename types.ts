@@ -5,7 +5,6 @@ export enum GameStatus {
   SETTING_TARGET = 'SETTING_TARGET',
   DRINKING = 'DRINKING',
   WEIGHING_FINAL = 'WEIGHING_FINAL',
-  ROUND_SUMMARY = 'ROUND_SUMMARY',
   ROUND_RESULT = 'ROUND_RESULT',
   FINISHED = 'FINISHED'
 }
@@ -55,8 +54,9 @@ export interface Game {
 }
 
 export interface GameRepository {
-  saveGame(game: Game): void;
+  saveGame(game: Game): Promise<void>;
   loadGame(code?: string): Promise<Game | null>;
+  deleteGameFromDB(code: string): Promise<void>;
   deleteGame(): void;
 }
 
