@@ -48,7 +48,6 @@ export interface Game {
   rounds: Round[];
   currentRoundIndex: number;
   bottleSize: BottleSize;
-  reactions?: Reaction[];
   pendingInitialWeights?: Record<string, number>;
   mode?: 'host' | 'peer';
 }

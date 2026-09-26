@@ -1,6 +1,6 @@
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { Game, GameRepository as IGameRepository } from '../types';
+import { createClient, RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
+import { Game, GameRepository as IGameRepository, Reaction } from '../types';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -41,16 +41,11 @@ const mapData = (data: any): Game => ({
   rounds: data.rounds,
   currentRoundIndex: data.current_round_index,
   bottleSize: data.bottle_size || '0.5',
-  reactions: data.reactions || [],
   pendingInitialWeights: data.pending_initial_weights || {},
   mode: (data.mode as 'host' | 'peer') || 'peer',
   createdAt: new Date(data.created_at).getTime(),
   isFinished: data.status === 'FINISHED'
 });
-
-/** Reaktionen sind rein dekorativ – nur die jüngsten behalten, sonst wächst die DB-Zeile endlos. */
-const MAX_PERSISTED_REACTIONS = 20;
-const trimReactions = (game: Game) => (game.reactions ?? []).slice(-MAX_PERSISTED_REACTIONS);
 
 export class SupabaseGameRepository implements IGameRepository {
   /** Wird gesetzt, wenn ein Speichern fehlschlägt – die App zeigt das als Hinweis an. */
@@ -72,7 +67,9 @@ export class SupabaseGameRepository implements IGameRepository {
         rounds: game.rounds,
         current_round_index: game.currentRoundIndex,
         bottle_size: game.bottleSize || '0.5',
-        reactions: trimReactions(game),
+        // Reaktionen laufen über Broadcast und werden nicht mehr gespeichert.
+        // Die Spalte bleibt bestehen (evtl. NOT NULL) und wird leer gehalten.
+        reactions: [],
         pending_initial_weights: game.pendingInitialWeights || {},
         mode: game.mode || 'peer'
       }, { onConflict: 'game_code' });
@@ -115,9 +112,27 @@ export class SupabaseGameRepository implements IGameRepository {
     localStorage.removeItem('bierwiegen_last_session');
   }
 
-  subscribeToGame(code: string, onUpdate: (game: Game | null) => void) {
+  /**
+   * Reaktion an die anderen Geräte schicken – über Realtime-Broadcast statt
+   * über die Tabelle. Ein Schreibvorgang auf die Spielzeile würde sonst den
+   * kompletten Stand überbügeln und dabei zeitgleich eingereichte Gewichte
+   * verlieren. Broadcast fasst die Tabelle gar nicht erst an.
+   */
+  sendReaction(channel: RealtimeChannel, reaction: Reaction): void {
+    channel.send({ type: 'broadcast', event: 'reaction', payload: reaction })
+      .catch(() => { /* Reaktionen sind Deko – ein verlorener Tipp ist egal */ });
+  }
+
+  subscribeToGame(
+    code: string,
+    onUpdate: (game: Game | null) => void,
+    onReaction?: (reaction: Reaction) => void,
+  ) {
     return getClient()
       .channel(`game_room:${code}`)
+      .on('broadcast', { event: 'reaction' }, ({ payload }) => {
+        onReaction?.(payload as Reaction);
+      })
       .on('postgres_changes', {
         event: '*',
         schema: 'public',

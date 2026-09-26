@@ -63,7 +63,6 @@ const DEMO_GAME: Game = {
   ],
   currentRoundIndex: 2,
   bottleSize: '0.5',
-  reactions: [],
   pendingInitialWeights: {},
 };
 // ─────────────────────────────────────────────────────────────────────────────
@@ -97,6 +96,10 @@ const App: React.FC = () => {
   const [resubscribeKey, setResubscribeKey] = useState(0);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [, setReactionTick] = useState(0);
+  // Reaktionen sind fluechtige Deko und leben nur lokal – sie gehen per
+  // Broadcast an die anderen Geraete, nicht mehr ueber die Spielzeile.
+  const [reactions, setReactions] = useState<Reaction[]>([]);
+  const channelRef = useRef<ReturnType<typeof repo.subscribeToGame> | null>(null);
 
   const gameRef = useRef<Game | null>(null);
   useEffect(() => { gameRef.current = game; }, [game]);
@@ -110,10 +113,10 @@ const App: React.FC = () => {
 
   // Abgelaufene Reaktionen ausblenden, ohne auf den naechsten State-Wechsel zu warten.
   useEffect(() => {
-    if (recentReactions(game?.reactions).length === 0) return;
+    if (recentReactions(reactions).length === 0) return;
     const t = setTimeout(() => setReactionTick(n => n + 1), REACTION_TTL_MS);
     return () => clearTimeout(t);
-  }, [game?.reactions]);
+  }, [reactions]);
 
   // Fix: Prost-Overlay beim Status-Wechsel weg von DRINKING zurücksetzen
   useEffect(() => {
@@ -182,18 +185,24 @@ const App: React.FC = () => {
     if (!game?.gameCode) return;
     if (devModeRef.current) return;
 
-    const channel = repo.subscribeToGame(game.gameCode, (updatedGame) => {
-      if (!updatedGame) {
-        setGame(null);
-        setMyPlayerId(null);
-        return;
-      }
-      if (JSON.stringify(gameRef.current) !== JSON.stringify(updatedGame)) {
-        setGame(updatedGame);
-      }
-    });
+    const channel = repo.subscribeToGame(
+      game.gameCode,
+      (updatedGame) => {
+        if (!updatedGame) {
+          setGame(null);
+          setMyPlayerId(null);
+          return;
+        }
+        if (JSON.stringify(gameRef.current) !== JSON.stringify(updatedGame)) {
+          setGame(updatedGame);
+        }
+      },
+      (reaction) => setReactions(prev => [...recentReactions(prev), reaction]),
+    );
+    channelRef.current = channel;
 
     return () => {
+      channelRef.current = null;
       channel.unsubscribe();
     };
   }, [game?.gameCode, resubscribeKey]);
@@ -236,8 +245,7 @@ const App: React.FC = () => {
       rounds: [],
       currentRoundIndex: 0,
       bottleSize: '0.5',
-      reactions: [],
-      pendingInitialWeights: {},
+          pendingInitialWeights: {},
       mode: newGameMode,
     };
     updateGame(() => newGame);
@@ -1282,7 +1290,7 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                       <span className="font-bungee text-slate-600 text-[10px]">#{idx + 1}</span>
                       <span className="font-bold text-sm">{p.name}</span>
                       <div className="relative">
-                        {recentReactions(game.reactions)
+                        {recentReactions(reactions)
                           .filter(r => r.targetPlayerId === p.id)
                           .map(r => <FloatingReaction key={r.id} emoji={r.emoji} />)}
                       </div>
@@ -1292,16 +1300,11 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                   {p.id !== myPlayerId && (
                     <div className="mt-2 flex justify-end">
                       <EmojiBar onReact={(emoji) => {
-                        updateGame(prev => {
-                          if (!prev) return null;
-                          return {
-                            ...prev,
-                            reactions: [
-                              ...recentReactions(prev.reactions),
-                              { id: createId(), emoji, targetPlayerId: p.id, timestamp: Date.now() },
-                            ],
-                          };
-                        });
+                        const reaction: Reaction = { id: createId(), emoji, targetPlayerId: p.id, timestamp: Date.now() };
+                        // Sofort selbst anzeigen: Broadcast schickt dem Absender
+                        // seine eigene Nachricht nicht zurueck (self: false).
+                        setReactions(prev => [...recentReactions(prev), reaction]);
+                        if (channelRef.current) repo.sendReaction(channelRef.current, reaction);
                       }} />
                     </div>
                   )}
