@@ -40,12 +40,15 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: npm run build
 
-      - name: Prüfen, dass die Supabase-Konfiguration im Build steckt
+      # Ohne gesetzte Secrets steht im Bundle "undefined" statt der Projekt-URL.
+      # Dann lieber hier abbrechen als eine tote App veroeffentlichen.
+      - name: Build auf Vollständigkeit prüfen
         run: |
-          if grep -rq "supabaseUrl is required\|VITE_SUPABASE_URL" dist/assets/*.js; then
-            echo "::warning::Platzhalter statt echter Werte im Build — sind die Repository-Secrets gesetzt?"
-          fi
-          test -f dist/fonts/inter-variable-latin.woff2 || { echo "::error::Schriften fehlen im Build"; exit 1; }
+          grep -q "supabase\.co" dist/assets/*.js \
+            || { echo "::error::Keine Supabase-URL im Build. Sind VITE_SUPABASE_URL und VITE_SUPABASE_ANON_KEY als Repository-Secrets gesetzt?"; exit 1; }
+          test -f dist/fonts/inter-variable-latin.woff2 \
+            || { echo "::error::Schriften fehlen im Build."; exit 1; }
+          echo "Build enthält Supabase-Konfiguration und Schriften."
 
       - uses: actions/upload-pages-artifact@v3
         with:
