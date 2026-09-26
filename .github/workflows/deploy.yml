@@ -1,0 +1,62 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  # Erlaubt manuelles Ausloesen ueber den Actions-Tab
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Laufende Deploys nicht abbrechen, aber auch nicht ueberholen lassen
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Abhängigkeiten installieren
+        run: npm ci
+
+      # Laeuft bewusst mit: ein kaputter Build soll gar nicht erst online gehen.
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: npm run build
+
+      - name: Prüfen, dass die Supabase-Konfiguration im Build steckt
+        run: |
+          if grep -rq "supabaseUrl is required\|VITE_SUPABASE_URL" dist/assets/*.js; then
+            echo "::warning::Platzhalter statt echter Werte im Build — sind die Repository-Secrets gesetzt?"
+          fi
+          test -f dist/fonts/inter-variable-latin.woff2 || { echo "::error::Schriften fehlen im Build"; exit 1; }
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
