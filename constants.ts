@@ -9,7 +9,7 @@ import { DrinkType, PerformanceTag } from './types';
 export const DRINK_THEMES: Record<DrinkType, { label: string; emoji: string; c500: string; c400: string }> = {
   beer:  { label: 'Bier',   emoji: '🍺', c500: '245 158 11', c400: '251 191 36'  }, // #f59e0b / #fbbf24
   water: { label: 'Wasser', emoji: '💧', c500: '56 189 248', c400: '125 211 252' }, // #38bdf8 / #7dd3fc
-  cola:  { label: 'Cola',   emoji: '🥤', c500: '212 136 60', c400: '224 154 80'  }, // #d4883c / #e09a50
+  cola:  { label: 'Cola',   emoji: '🥤', c500: '181 115 63', c400: '201 140 85'  }, // #b5733f / #c98c55 (Karamellbraun)
 };
 
 /** Getränk wird nur lokal im Browser gemerkt – keine eigene DB-Spalte nötig. */
