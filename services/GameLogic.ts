@@ -27,17 +27,31 @@ export const getDrinkingProgress = (currentWeight: number, firstWeight: number, 
   return fillLevel;
 };
 
+/**
+ * Leistungs-Abzeichen eines Spielers.
+ *
+ * Reihenfolge ist bewusst: Genauigkeit schlaegt alles andere. Zuvor wurde
+ * SAINT ("keine Strafe") ganz oben geprueft – praezise Spieler kassieren aber
+ * selten Strafen, wodurch die Genauigkeits-Tags praktisch nie vergeben wurden.
+ * SAINT und JINX sind jetzt die Auffang-Abzeichen fuer unauffaellige Werte.
+ */
 export const getPlayerPerformanceTag = (player: Player, allPlayers: Player[], rounds: Round[]): PerformanceTag => {
-  const avg = calculateAverageDeviation(player.deviations);
-  if (player.penalties === 0 && player.deviations.length > 1) {
-    return PERFORMANCE_TAGS.SAINT;
-  }
-  const maxPenalties = Math.max(...allPlayers.map(p => p.penalties));
-  if (player.penalties === maxPenalties && maxPenalties > 0 && allPlayers.length > 1) {
-    const othersWithMax = allPlayers.filter(p => p.penalties === maxPenalties).length;
-    if (othersWithMax === 1) return PERFORMANCE_TAGS.JINX;
-  }
+  // Zu wenig Daten: alles andere waere geraten.
   if (player.deviations.length < 2) return PERFORMANCE_TAGS.NOVICE;
+
+  const avg = calculateAverageDeviation(player.deviations);
+  const spread = Math.max(...player.deviations) - Math.min(...player.deviations);
+
+  // 1. Genauigkeit – die eigentliche Disziplin des Spiels.
+  if (avg <= 5) return PERFORMANCE_TAGS.ORAL_SCALE;
+  if (avg <= 10) return PERFORMANCE_TAGS.PRECISION;
+
+  // 2. Stark schwankend, unabhaengig vom Mittelwert.
+  if (spread > 20) return PERFORMANCE_TAGS.UNPREDICTABLE;
+
+  if (avg <= 15) return PERFORMANCE_TAGS.CALCULATOR;
+
+  // 3. Wer regelmaessig deutlich ueber das Ziel hinaustrinkt.
   const lastRound = rounds[rounds.length - 1];
   if (lastRound) {
     const lastFinalWeight = player.weights[player.weights.length - 1];
@@ -45,12 +59,15 @@ export const getPlayerPerformanceTag = (player: Player, allPlayers: Player[], ro
       return PERFORMANCE_TAGS.RISK_TAKER;
     }
   }
-  const spread = Math.max(...player.deviations) - Math.min(...player.deviations);
-  if (avg <= 3) return PERFORMANCE_TAGS.ORAL_SCALE;
-  if (avg <= 8) return PERFORMANCE_TAGS.PRECISION;
-  if (avg <= 15) return PERFORMANCE_TAGS.CALCULATOR;
-  if (avg > 20) return PERFORMANCE_TAGS.NOVICE;
-  if (spread > 20) return PERFORMANCE_TAGS.UNPREDICTABLE;
+
+  // 4. Strafen-Abzeichen als Auffang.
+  const maxPenalties = Math.max(...allPlayers.map(p => p.penalties));
+  if (player.penalties === maxPenalties && maxPenalties > 0 && allPlayers.length > 1) {
+    const othersWithMax = allPlayers.filter(p => p.penalties === maxPenalties).length;
+    if (othersWithMax === 1) return PERFORMANCE_TAGS.JINX;
+  }
+  if (player.penalties === 0) return PERFORMANCE_TAGS.SAINT;
+
   return PERFORMANCE_TAGS.NOVICE;
 };
 

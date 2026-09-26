@@ -11,12 +11,12 @@ export const PERFORMANCE_TAGS: Record<string, PerformanceTag> = {
   ORAL_SCALE: {
     label: 'Orale Waage',
     icon: '👄',
-    description: 'Unter 5g Abweichung. Erschreckend präzise.'
+    description: 'Höchstens 5g Abweichung. Erschreckend präzise.'
   },
   PRECISION: {
     label: 'Champions League',
     icon: '🎯',
-    description: 'Sehr konstante, geringe Abweichungen.'
+    description: 'Höchstens 10g Abweichung. Sehr konstant.'
   },
   UNPREDICTABLE: {
     label: 'Unberechenbar',
@@ -31,7 +31,7 @@ export const PERFORMANCE_TAGS: Record<string, PerformanceTag> = {
   CALCULATOR: {
     label: 'Der Rechner',
     icon: '🧮',
-    description: 'Konstant nahe am Ziel, fast schon unheimlich.'
+    description: 'Höchstens 15g Abweichung. Solide am Ziel.'
   },
   NOVICE: {
     label: 'Lehrling',

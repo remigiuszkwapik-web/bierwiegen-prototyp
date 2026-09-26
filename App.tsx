@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import Lottie from 'lottie-react';
 import cheersAnimation from './src/assets/cheers.json';
 import { Game, GameStatus, Player, Round, Reaction, BottleSize } from './types';
-import { SupabaseGameRepository } from './repositories/GameRepository';
+import { SupabaseGameRepository, isSupabaseConfigured } from './repositories/GameRepository';
 import { Card, Button, Input, BeerProgressBar, FloatingReaction, EmojiBar, PlacementCard } from './components/UI';
 import { BOTTLE_SIZES } from './constants';
 import {
@@ -17,6 +17,29 @@ import {
 } from './services/GameLogic';
 
 const repo = new SupabaseGameRepository();
+
+/** Kurze, eindeutige ID. (substr ist deprecated – slice leistet dasselbe.) */
+const createId = () => Math.random().toString(36).slice(2, 11);
+
+/** Voreingestellte Trinkmenge – muss zur Anzeige und zum Slider passen. */
+const DEFAULT_DRINK_AMOUNT = 30;
+
+/** Reaktionen sind fluechtig: aelteres wird weder gezeigt noch gespeichert. */
+const REACTION_TTL_MS = 4000;
+const recentReactions = (reactions: Reaction[] | undefined) =>
+  (reactions ?? []).filter(r => Date.now() - r.timestamp < REACTION_TTL_MS);
+
+/** Letztes erfasstes Gewicht, oder null wenn der Spieler noch nicht gewogen hat. */
+const lastWeight = (p: Player): number | null => {
+  const w = p.weights[p.weights.length - 1];
+  return typeof w === 'number' && Number.isFinite(w) ? w : null;
+};
+
+/** Niedrigstes bekanntes Gewicht aller Spieler – null, wenn noch keiner gewogen hat. */
+const minLastWeight = (players: Player[]): number | null => {
+  const weights = players.map(lastWeight).filter((w): w is number => w !== null);
+  return weights.length ? Math.min(...weights) : null;
+};
 
 // ─── DEV MODE ────────────────────────────────────────────────────────────────
 const IS_DEV_PARAM = new URLSearchParams(window.location.search).get('dev') === 'true';
@@ -48,7 +71,7 @@ const DEMO_GAME: Game = {
 const getUserId = () => {
     let id = localStorage.getItem('bierwiegen_user_id');
     if (!id) {
-        id = Math.random().toString(36).substr(2, 9);
+        id = createId();
         localStorage.setItem('bierwiegen_user_id', id);
     }
     return id;
@@ -72,9 +95,25 @@ const App: React.FC = () => {
   const [showCheers, setShowCheers] = useState(false);
   const [poppedBubbles, setPoppedBubbles] = useState<Set<number>>(new Set());
   const [resubscribeKey, setResubscribeKey] = useState(0);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [, setReactionTick] = useState(0);
 
   const gameRef = useRef<Game | null>(null);
   useEffect(() => { gameRef.current = game; }, [game]);
+
+  // Speicherfehler an die Oberflaeche holen: vorher divergierte der lokale
+  // Stand still und leise von der Datenbank.
+  useEffect(() => {
+    repo.onError = (msg) => setSyncError(msg);
+    return () => { repo.onError = null; };
+  }, []);
+
+  // Abgelaufene Reaktionen ausblenden, ohne auf den naechsten State-Wechsel zu warten.
+  useEffect(() => {
+    if (recentReactions(game?.reactions).length === 0) return;
+    const t = setTimeout(() => setReactionTick(n => n + 1), REACTION_TTL_MS);
+    return () => clearTimeout(t);
+  }, [game?.reactions]);
 
   // Fix: Prost-Overlay beim Status-Wechsel weg von DRINKING zurücksetzen
   useEffect(() => {
@@ -119,6 +158,10 @@ const App: React.FC = () => {
         localStorage.removeItem('bierwiegen_last_session');
         localStorage.removeItem('bierwiegen_player_id');
       }
+    }).catch(() => {
+      // Kein Netz / DB nicht erreichbar: gespeicherte Sitzung behalten,
+      // damit ein spaeterer Versuch sie noch wiederherstellen kann.
+      setSyncError('Gespeicherte Sitzung konnte nicht geladen werden.');
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -171,9 +214,19 @@ const App: React.FC = () => {
     }
   }, []);
 
+  const addPlayer = () => {
+    const name = newPlayerName.trim();
+    if (!name) return;
+    updateGame(p => p ? {
+      ...p,
+      players: [...p.players, { id: createId(), name, weights: [], deviations: [], penalties: 0 }],
+    } : null);
+    setNewPlayerName('');
+  };
+
   const createGame = () => {
     const newGame: Game = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: createId(),
       gameCode: generateGameCode(),
       hostId: myUserId,
       createdAt: Date.now(),
@@ -206,11 +259,15 @@ const App: React.FC = () => {
   const joinGame = async () => {
     const code = joinCodeInput.toUpperCase().trim();
     if (!code) return;
-    const loaded = await repo.loadGame(code);
-    if (loaded) {
-      setGame(loaded);
-    } else {
-      alert("Raum nicht gefunden!");
+    try {
+      const loaded = await repo.loadGame(code);
+      if (loaded) {
+        setGame(loaded);
+      } else {
+        alert("Raum nicht gefunden!");
+      }
+    } catch {
+      alert("Keine Verbindung zur Datenbank. Prüfe deine Internetverbindung und versuch es erneut.");
     }
   };
 
@@ -220,7 +277,9 @@ const App: React.FC = () => {
 
   const minWeightPlayer = useMemo(() => {
     if (!game || game.players.length === 0) return null;
-    return [...game.players].sort((a, b) => (a.weights.slice(-1)[0] || 0) - (b.weights.slice(-1)[0] || 0))[0];
+    const weighed = game.players.filter(p => lastWeight(p) !== null);
+    if (weighed.length === 0) return null;
+    return [...weighed].sort((a, b) => lastWeight(a)! - lastWeight(b)!)[0];
   }, [game]);
 
   const chooserIsMe = useMemo(() => {
@@ -315,6 +374,29 @@ const App: React.FC = () => {
   }, [game?.rounds, game?.status, game?.players.length]);
 
   // ─── SCREENS ─────────────────────────────────────────────────────────────────
+
+  // Ohne Supabase-Konfiguration blieb die Seite frueher komplett weiss, weil
+  // createClient() schon beim Import warf. Jetzt gibt es eine klare Ansage –
+  // der Dev-Mode braucht die Datenbank ohnehin nicht und bleibt nutzbar.
+  if (!isSupabaseConfigured && !devMode) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <Card className="max-w-md w-full text-center">
+          <div className="text-5xl mb-4">🔌</div>
+          <h1 className="text-xl font-bungee mb-3 uppercase">Nicht konfiguriert</h1>
+          <p className="text-slate-400 text-sm mb-4">
+            Die Verbindung zur Datenbank fehlt. Lege im Projektordner eine Datei
+            <span className="font-bungee text-amber-500"> .env </span>
+            an und trage dort ein:
+          </p>
+          <pre className="text-left text-[11px] bg-slate-900 border border-slate-700 rounded-xl p-3 mb-4 overflow-x-auto text-slate-300">VITE_SUPABASE_URL=...
+VITE_SUPABASE_ANON_KEY=...</pre>
+          <p className="text-slate-500 text-xs mb-6">Eine Vorlage liegt als <span className="font-bold">.env.example</span> bei. Danach den Dev-Server neu starten.</p>
+          <Button variant="secondary" onClick={loadDemoGame} className="w-full">Ohne Datenbank ausprobieren (Demo)</Button>
+        </Card>
+      </div>
+    );
+  }
 
   if (!game) {
     return (
@@ -472,18 +554,14 @@ const App: React.FC = () => {
                     onChange={(e) => setNewPlayerName(e.target.value)}
                     placeholder="Name..."
                     className="flex-1"
-                    onKeyPress={(e) => {
-                      if (e.key === 'Enter' && newPlayerName.trim()) {
-                        updateGame(p => p ? { ...p, players: [...p.players, { id: Math.random().toString(36).substr(2, 9), name: newPlayerName.trim(), weights: [], deviations: [], penalties: 0 }] } : null);
-                        setNewPlayerName('');
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addPlayer();
                       }
                     }}
                   />
-                  <Button onClick={() => {
-                    if (!newPlayerName.trim()) return;
-                    updateGame(p => p ? { ...p, players: [...p.players, { id: Math.random().toString(36).substr(2, 9), name: newPlayerName.trim(), weights: [], deviations: [], penalties: 0 }] } : null);
-                    setNewPlayerName('');
-                  }}>Add</Button>
+                  <Button onClick={addPlayer}>Add</Button>
                 </div>
                 <div className="space-y-1">
                   {game.players.map(p => (
@@ -560,6 +638,17 @@ const App: React.FC = () => {
   return (
     <div className={`min-h-screen${devMode ? ' pb-20' : ''}`}>
       <div className="p-4 max-w-2xl mx-auto space-y-6">
+
+        {syncError && (
+          <div className="bg-red-500/10 border border-red-500/30 rounded-2xl px-4 py-3 flex items-start gap-3">
+            <span className="text-lg leading-none">⚠️</span>
+            <div className="flex-1">
+              <p className="text-red-400 text-xs font-bold uppercase">Nicht gespeichert</p>
+              <p className="text-slate-400 text-[11px] mt-0.5">Dein Spielstand konnte nicht synchronisiert werden. Die anderen sehen deine Eingabe evtl. nicht.</p>
+            </div>
+            <button onClick={() => setSyncError(null)} className="text-slate-500 text-xs font-bold hover:text-slate-300">✕</button>
+          </div>
+        )}
 
         {/* Header */}
         <header className="flex justify-between items-end">
@@ -652,6 +741,32 @@ const App: React.FC = () => {
         )}
 
         {/* ─── WEIGHING_INITIAL ──────────────────────────────────────────────── */}
+        {/* ─── SETUP (Spieler bereits gewählt) ───────────────────────────────── */}
+        {game.status === GameStatus.SETUP && (
+          <Card className="text-center py-8">
+            <div className="text-4xl mb-3">⏳</div>
+            <h2 className="text-lg font-bungee mb-2 uppercase">
+              {isCreator ? 'Bereit zum Start' : 'Warte auf den Ersteller'}
+            </h2>
+            <p className="text-slate-400 text-xs font-bold uppercase mb-6">
+              {isCreator
+                ? `${game.players.length} Spieler im Raum`
+                : 'Das Spiel wird gleich gestartet...'}
+            </p>
+            {isCreator && (
+              <Button
+                onClick={() => updateGame(p => p ? { ...p, status: GameStatus.WEIGHING_INITIAL } : null)}
+                disabled={game.players.length < 1}
+                className="w-full py-4 text-xl font-bungee"
+              >START</Button>
+            )}
+            <button
+              onClick={() => setMyPlayerId(null)}
+              className="mt-4 text-slate-500 font-bold text-[10px] uppercase hover:text-slate-300"
+            >← Zurück zur Spielerauswahl</button>
+          </Card>
+        )}
+
         {game.status === GameStatus.WEIGHING_INITIAL && (() => {
           const maxW = (BOTTLE_SIZES[game.bottleSize] ?? BOTTLE_SIZES['0.5']).maxWeight;
 
@@ -778,10 +893,16 @@ const App: React.FC = () => {
           (chooserIsMe || (game.mode === 'host' && isCreator)) ? (
             <Card className="text-center">
               <h2 className="text-xl font-bungee mb-2 uppercase">Du bist dran!</h2>
-              <p className="text-slate-400 text-xs font-bold uppercase mb-6">Du hast die leerste Flasche – wähle das Ziel</p>
+              <p className="text-slate-400 text-xs font-bold uppercase mb-6">
+                {chooserIsMe
+                  ? 'Du hast die leerste Flasche – wähle das Ziel'
+                  : `${minWeightPlayer?.name} hat die leerste Flasche – wähle das Ziel`}
+              </p>
               <div className="bg-slate-900 p-6 rounded-2xl mb-6">
-                <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">Dein aktuelles Gewicht</div>
-                <div className="text-4xl font-bungee text-white">{minWeightPlayer?.weights.slice(-1)[0]}g</div>
+                <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">
+                  {chooserIsMe ? 'Dein aktuelles Gewicht' : `Niedrigstes Gewicht (${minWeightPlayer?.name})`}
+                </div>
+                <div className="text-4xl font-bungee text-white">{minWeightPlayer ? lastWeight(minWeightPlayer) : 0}g</div>
               </div>
               <div className="space-y-4">
                 <div className="flex gap-2">
@@ -795,13 +916,13 @@ const App: React.FC = () => {
                 </div>
                 <div className="bg-slate-800 p-4 rounded-xl">
                   <div className="text-center text-2xl font-bungee text-amber-400 mb-3">
-                    {drinkAmountInput || '30'}g
+                    {drinkAmountInput || DEFAULT_DRINK_AMOUNT}g
                   </div>
                   <input
                     type="range"
                     min={30}
                     max={100}
-                    value={drinkAmountInput || '30'}
+                    value={drinkAmountInput || DEFAULT_DRINK_AMOUNT}
                     onChange={(e) => setDrinkAmountInput(e.target.value)}
                     className="w-full accent-amber-500"
                   />
@@ -812,11 +933,14 @@ const App: React.FC = () => {
                 </div>
                 <Button
                   onClick={() => {
-                    const amount = parseInt(drinkAmountInput);
-                    if (!amount) return;
+                    // Ohne Antippen eines Presets stand hier NaN und der Knopf tat
+                    // stillschweigend nichts – obwohl die Karte 30g anzeigt.
+                    const parsed = parseInt(drinkAmountInput);
+                    const amount = Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_DRINK_AMOUNT;
                     updateGame(prev => {
                       if (!prev) return null;
-                      const currentMin = Math.min(...prev.players.map(p => p.weights.slice(-1)[0]));
+                      const currentMin = minLastWeight(prev.players);
+                      if (currentMin === null) return prev;
                       return {
                         ...prev,
                         status: GameStatus.DRINKING,
@@ -1085,7 +1209,11 @@ const App: React.FC = () => {
               ) : (
                 <Card className="bg-amber-500/10 border-amber-500/30">
                   <p className="text-center text-sm font-bold uppercase text-amber-500">Strafe an {penaltyTarget?.name} vergeben</p>
-                  <p className="text-center text-xs text-slate-400 mt-1">{roundLoser?.name} + {penaltyTarget?.name} trinken einen Kurzen.</p>
+                  <p className="text-center text-xs text-slate-400 mt-1">
+                    {roundLoser && penaltyTarget && roundLoser.id === penaltyTarget.id
+                      ? `${penaltyTarget.name} trinkt einen Kurzen.`
+                      : `${roundLoser?.name} + ${penaltyTarget?.name} trinken einen Kurzen.`}
+                  </p>
                 </Card>
               )}
 
@@ -1107,10 +1235,14 @@ const App: React.FC = () => {
 
               <Button
                 onClick={() => {
-                  const currentMin = Math.min(...game.players.map(p => p.weights.slice(-1)[0]));
+                  const currentMin = minLastWeight(game.players);
                   const bottleCfg = BOTTLE_SIZES[game.bottleSize] ?? BOTTLE_SIZES['0.5'];
-                  const maxDrunk = Math.max(...game.players.map(p => (p.weights[0] || 0) - p.weights.slice(-1)[0]));
-                  const isFinished = currentMin < bottleCfg.finishedThreshold || maxDrunk >= bottleCfg.liquidWeight;
+                  const drunkPerPlayer = game.players
+                    .map(p => { const last = lastWeight(p); return last === null ? null : (p.weights[0] ?? last) - last; })
+                    .filter((d): d is number => d !== null);
+                  const maxDrunk = drunkPerPlayer.length ? Math.max(...drunkPerPlayer) : 0;
+                  const isFinished = currentMin !== null
+                    && (currentMin < bottleCfg.finishedThreshold || maxDrunk >= bottleCfg.liquidWeight);
                   updateGame(p => p ? { ...p, status: isFinished ? GameStatus.FINISHED : GameStatus.SETTING_TARGET, currentRoundIndex: p.currentRoundIndex + 1 } : null);
                 }}
                 disabled={!penaltyTargetId}
@@ -1150,7 +1282,9 @@ const App: React.FC = () => {
                       <span className="font-bungee text-slate-600 text-[10px]">#{idx + 1}</span>
                       <span className="font-bold text-sm">{p.name}</span>
                       <div className="relative">
-                        {game.reactions?.filter(r => r.targetPlayerId === p.id).map(r => <FloatingReaction key={r.id} emoji={r.emoji} />)}
+                        {recentReactions(game.reactions)
+                          .filter(r => r.targetPlayerId === p.id)
+                          .map(r => <FloatingReaction key={r.id} emoji={r.emoji} />)}
                       </div>
                     </div>
                     <div className="font-bungee text-xs">{calculateAverageDeviation(p.deviations)}g</div>
@@ -1160,7 +1294,13 @@ const App: React.FC = () => {
                       <EmojiBar onReact={(emoji) => {
                         updateGame(prev => {
                           if (!prev) return null;
-                          return { ...prev, reactions: [...(prev.reactions || []), { id: Math.random().toString(36).substr(2, 9), emoji, targetPlayerId: p.id, timestamp: Date.now() }] };
+                          return {
+                            ...prev,
+                            reactions: [
+                              ...recentReactions(prev.reactions),
+                              { id: createId(), emoji, targetPlayerId: p.id, timestamp: Date.now() },
+                            ],
+                          };
                         });
                       }} />
                     </div>
