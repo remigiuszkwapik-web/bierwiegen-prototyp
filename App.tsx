@@ -728,7 +728,7 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                         value={customVolumeInput}
                         onChange={(e) => setCustomVolumeInput(e.target.value)}
                         placeholder="z. B. 300"
-                        className="flex-1 text-center font-bungee"
+                        className="flex-1 min-w-0 text-center font-bungee"
                       />
                       <span className="text-slate-500 text-xs font-bold uppercase">ml</span>
                       <Button
@@ -747,8 +747,9 @@ VITE_SUPABASE_ANON_KEY=...</pre>
             </div>
           )}
 
-          {/* Selbst eintragen (für alle, solange das Spiel nicht läuft) – Getränk kommt im nächsten Schritt */}
-          {inSetup && (
+          {/* Selbst eintragen (Mitspieler per Link/Code, solange das Spiel nicht läuft) – Getränk kommt im
+              nächsten Schritt. Der Host braucht das nicht: er trägt sich unten wie alle ein und tippt sich an. */}
+          {inSetup && !isCreator && (
             <div className="bg-slate-900/40 border border-slate-700 rounded-2xl p-4 mb-6">
               <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Dein Name</p>
               <Input
