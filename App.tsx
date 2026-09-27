@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Lottie from 'lottie-react';
 import cheersAnimation from './src/assets/cheers.json';
-import { Game, GameStatus, Player, Round, Reaction, BottleSize, DrinkType } from './types';
+import { Game, GameStatus, Player, Round, Reaction, Ping, BottleSize, DrinkType } from './types';
 import { SupabaseGameRepository, isSupabaseConfigured } from './repositories/GameRepository';
 import { Card, Button, Input, BeerProgressBar, FloatingReaction, EmojiBar, PlacementCard } from './components/UI';
 import { BOTTLE_SIZES, DRINK_THEMES, DRINK_STORAGE_KEY, applyDrinkTheme } from './constants';
@@ -28,6 +28,11 @@ const DEFAULT_DRINK_AMOUNT = 30;
 const REACTION_TTL_MS = 4000;
 const recentReactions = (reactions: Reaction[] | undefined) =>
   (reactions ?? []).filter(r => Date.now() - r.timestamp < REACTION_TTL_MS);
+
+/** Wie lange der gelbe Rahmen beim Angepingten bleibt – und wie lange man
+ *  denselben Spieler nicht erneut anpingen kann. */
+const PING_TTL_MS = 10000;
+const PING_COOLDOWN_MS = 5000;
 
 /** Letztes erfasstes Gewicht, oder null wenn der Spieler noch nicht gewogen hat. */
 const lastWeight = (p: Player): number | null => {
@@ -111,6 +116,8 @@ const App: React.FC = () => {
   // Broadcast an die anderen Geraete, nicht mehr ueber die Spielzeile.
   const [reactions, setReactions] = useState<Reaction[]>([]);
   const channelRef = useRef<ReturnType<typeof repo.subscribeToGame> | null>(null);
+  // Pings pro Spieler-ID: wann zuletzt angepingt und von wem. Lebt nur lokal.
+  const [pings, setPings] = useState<Record<string, { at: number; from: string }>>({});
 
   const gameRef = useRef<Game | null>(null);
   useEffect(() => { gameRef.current = game; }, [game]);
@@ -121,6 +128,21 @@ const App: React.FC = () => {
     repo.onError = (msg) => setSyncError(msg);
     return () => { repo.onError = null; };
   }, []);
+
+  // Abgelaufene Pings ausblenden (Rahmen weg, Anpingen wieder möglich).
+  const hasPings = Object.keys(pings).length > 0;
+  useEffect(() => {
+    if (!hasPings) return;
+    const t = setInterval(() => {
+      const now = Date.now();
+      setPings(prev => {
+        const alive = Object.entries(prev).filter(([, p]) => now - p.at < PING_TTL_MS);
+        return alive.length === Object.keys(prev).length ? prev : Object.fromEntries(alive);
+      });
+      setReactionTick(n => n + 1);
+    }, 1000);
+    return () => clearInterval(t);
+  }, [hasPings]);
 
   // Abgelaufene Reaktionen ausblenden, ohne auf den naechsten State-Wechsel zu warten.
   useEffect(() => {
@@ -226,6 +248,7 @@ const App: React.FC = () => {
         }
       },
       (reaction) => setReactions(prev => [...recentReactions(prev), reaction]),
+      (ping) => setPings(prev => ({ ...prev, [ping.targetPlayerId]: { at: Date.now(), from: ping.fromName } })),
     );
     channelRef.current = channel;
 
@@ -824,17 +847,42 @@ VITE_SUPABASE_ANON_KEY=...</pre>
     if (p && canRemove(p)) setRemoveCandidate(p);
   };
 
-  /** Für den Host: auf wen wartet das Spiel gerade? (nur "Jeder selbst") */
+  /** Auf wen wartet das Spiel gerade? (nur "Jeder selbst" – im Host-Mode tippt der Host alles ein) */
   const waitingOn = (p: Player): string | null => {
-    if (!isCreator || game.mode === 'host') return null;
+    if (game.mode === 'host') return null;
     switch (game.status) {
-      case GameStatus.WEIGHING_INITIAL: return (game.pendingInitialWeights ?? {})[p.id] === undefined ? 'wiegt noch' : null;
+      case GameStatus.WEIGHING_INITIAL: return (game.pendingInitialWeights ?? {})[p.id] === undefined ? 'fehlt noch' : null;
       case GameStatus.SETTING_TARGET: return minWeightPlayer?.id === p.id ? 'wählt das Ziel' : null;
-      case GameStatus.WEIGHING_FINAL: return currentRound && currentRound.finalWeights[p.id] === undefined ? 'wiegt noch' : null;
+      case GameStatus.WEIGHING_FINAL: return currentRound && currentRound.finalWeights[p.id] === undefined ? 'fehlt noch' : null;
       case GameStatus.ROUND_RESULT: return !penaltyTargetId && roundWinner?.id === p.id ? 'vergibt die Strafe' : null;
       default: return null;
     }
   };
+  const isWeighing = game.mode !== 'host' && (game.status === GameStatus.WEIGHING_INITIAL || game.status === GameStatus.WEIGHING_FINAL);
+
+  const pingCoolingDown = (id: string) => !!pings[id] && Date.now() - pings[id].at < PING_COOLDOWN_MS;
+  const sendPing = (p: Player) => {
+    if (pingCoolingDown(p.id)) return;
+    const ping: Ping = { targetPlayerId: p.id, fromName: myPlayer?.name ?? '', timestamp: Date.now() };
+    setPings(prev => ({ ...prev, [p.id]: { at: Date.now(), from: ping.fromName } }));
+    if (channelRef.current) repo.sendPing(channelRef.current, ping);
+  };
+  const pingButton = (player: Player) => (
+    <button
+      type="button"
+      onClick={() => sendPing(player)}
+      disabled={pingCoolingDown(player.id)}
+      className="shrink-0 whitespace-nowrap px-3 py-2 rounded-full border-2 border-yellow-400 text-yellow-300 text-[10px] font-bold uppercase disabled:border-slate-700 disabled:text-slate-500 transition-colors"
+    >{pingCoolingDown(player.id) ? '✓ Angepingt' : '📣 Anpingen'}</button>
+  );
+
+  // Ich wurde angepingt und bin noch dran → dicker gelber Rahmen.
+  const myPing = myPlayerId ? pings[myPlayerId] : undefined;
+  const myWaiting = myPlayer ? waitingOn(myPlayer) : null;
+  const showMyPing = !!myPing && !!myWaiting && Date.now() - myPing.at < PING_TTL_MS;
+  const myPingText = myWaiting === 'wählt das Ziel' ? 'Du bist dran – wähl das Ziel!'
+    : myWaiting === 'vergibt die Strafe' ? 'Du bist dran – vergib die Strafe!'
+    : 'Trag dein Gewicht ein!';
 
   return (
     <div className={`min-h-screen${devMode ? ' pb-20' : ''}`}>
@@ -1429,6 +1477,9 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                     <p className="text-slate-400 text-xs font-bold uppercase">
                       {game.mode === 'host' ? 'Host vergibt gerade die Strafe...' : `${roundWinner?.name} vergibt gerade die Strafe...`}
                     </p>
+                    {game.mode !== 'host' && roundWinner && roundWinner.id !== myPlayerId && (
+                      <div className="mt-3 flex justify-center">{pingButton(roundWinner)}</div>
+                    )}
                   </Card>
                 )
               ) : (
@@ -1510,7 +1561,8 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="font-bungee text-slate-600 text-[10px]">#{idx + 1}</span>
                       <span className="font-bold text-sm">{p.name}</span>
-                      {waiting && <span className="text-[10px] font-bold uppercase text-amber-500">⏳ {waiting}</span>}
+                      {waiting && <span className="text-[10px] font-bold uppercase text-yellow-300">⏳ {waiting}</span>}
+                      {!waiting && isWeighing && <span className="text-[10px] font-bold uppercase text-green-400">✓ eingetragen</span>}
                       <div className="relative">
                         {recentReactions(reactions)
                           .filter(r => r.targetPlayerId === p.id)
@@ -1528,7 +1580,8 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                     <div className="flex justify-between items-center">{rowContent}</div>
                   )}
                   {p.id !== myPlayerId && (
-                    <div className="mt-2 flex justify-end">
+                    <div className="mt-2 flex items-center justify-end gap-2">
+                      {waiting && <div className="mr-auto">{pingButton(p)}</div>}
                       <EmojiBar onReact={(emoji) => {
                         const reaction: Reaction = { id: createId(), emoji, targetPlayerId: p.id, timestamp: Date.now() };
                         // Sofort selbst anzeigen: Broadcast schickt dem Absender
@@ -1567,6 +1620,22 @@ VITE_SUPABASE_ANON_KEY=...</pre>
             className="text-[10px] font-bold text-slate-600 hover:text-slate-400 uppercase px-1 ml-auto shrink-0"
           >↺ RESET</button>
         </div>
+      )}
+
+      {/* ─── Angepingt: dicker gelber Rahmen + Hinweis ─────────────────── */}
+      {showMyPing && (
+        <>
+          <div className="fixed inset-0 z-[60] pointer-events-none border-[14px] border-yellow-400 animate-pulse" />
+          <button
+            type="button"
+            onClick={() => setPings(prev => { const n = { ...prev }; delete n[myPlayerId!]; return n; })}
+            className="fixed top-6 left-1/2 -translate-x-1/2 z-[61] w-[calc(100%-4rem)] max-w-sm bg-yellow-400 text-slate-900 rounded-2xl px-5 py-4 shadow-2xl text-center"
+          >
+            <div className="font-bungee text-xl leading-tight">Hey {myPlayer?.name}!</div>
+            <div className="text-sm font-bold">{myPingText}</div>
+            {myPing?.from && <div className="text-[10px] font-bold uppercase opacity-70 mt-1">{myPing.from} wartet auf dich · tippen zum Schließen</div>}
+          </button>
+        </>
       )}
 
       {/* ─── Host: Spieler aus dem laufenden Spiel nehmen ───────────────── */}

@@ -17,6 +17,13 @@ export interface Reaction {
   timestamp: number;
 }
 
+/** Visueller "Hey, du bist dran"-Hinweis an einen Spieler (per Broadcast, nicht gespeichert). */
+export interface Ping {
+  targetPlayerId: string;
+  fromName: string;
+  timestamp: number;
+}
+
 export interface Player {
   id: string;
   name: string;

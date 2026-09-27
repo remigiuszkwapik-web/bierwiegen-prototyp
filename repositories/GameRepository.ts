@@ -1,6 +1,6 @@
 
 import { createClient, RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
-import { Game, GameRepository as IGameRepository, Reaction } from '../types';
+import { Game, GameRepository as IGameRepository, Ping, Reaction } from '../types';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -123,15 +123,25 @@ export class SupabaseGameRepository implements IGameRepository {
       .catch(() => { /* Reaktionen sind Deko – ein verlorener Tipp ist egal */ });
   }
 
+  /** Spieler anpingen – wie Reaktionen flüchtig per Broadcast, ohne die Spielzeile anzufassen. */
+  sendPing(channel: RealtimeChannel, ping: Ping): void {
+    channel.send({ type: 'broadcast', event: 'ping', payload: ping })
+      .catch(() => { /* ein verlorener Ping ist egal, man kann nochmal drücken */ });
+  }
+
   subscribeToGame(
     code: string,
     onUpdate: (game: Game | null) => void,
     onReaction?: (reaction: Reaction) => void,
+    onPing?: (ping: Ping) => void,
   ) {
     return getClient()
       .channel(`game_room:${code}`)
       .on('broadcast', { event: 'reaction' }, ({ payload }) => {
         onReaction?.(payload as Reaction);
+      })
+      .on('broadcast', { event: 'ping' }, ({ payload }) => {
+        onPing?.(payload as Ping);
       })
       .on('postgres_changes', {
         event: '*',
