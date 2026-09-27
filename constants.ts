@@ -23,10 +23,17 @@ export const applyDrinkTheme = (drink: DrinkType) => {
 };
 
 export const BOTTLE_SIZES = {
-  '0.33': { label: '0,33L (Kleines)', maxWeight: 700,  liquidWeight: 330,  finishedThreshold: 150 },
-  '0.5':  { label: '0,5L (Großes)',   maxWeight: 1000, liquidWeight: 500,  finishedThreshold: 200 },
-  '1.0':  { label: '1,0L (Maß)',      maxWeight: 1600, liquidWeight: 1000, finishedThreshold: 350 },
+  '0.33': { label: '0,33L (Kleines)', maxWeight: 700,  liquidWeight: 330 },
+  '0.5':  { label: '0,5L (Großes)',   maxWeight: 1000, liquidWeight: 500 },
+  '1.0':  { label: '1,0L (Maß)',      maxWeight: 1600, liquidWeight: 1000 },
 } as const;
+
+/** Grenzen für eine eigene Füllmenge (ml). */
+export const CUSTOM_VOLUME_MIN = 100;
+export const CUSTOM_VOLUME_MAX = 2000;
+
+/** Kleinste Trinkmenge pro Runde – Untergrenze des Schiebereglers bei der Zielwahl. */
+export const MIN_DRINK_AMOUNT = 30;
 
 export const PERFORMANCE_TAGS: Record<string, PerformanceTag> = {
   ORAL_SCALE: {

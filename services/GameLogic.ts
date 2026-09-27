@@ -1,6 +1,6 @@
 
-import { Player, PerformanceTag, Round, BottleSize } from '../types';
-import { PERFORMANCE_TAGS, BOTTLE_SIZES } from '../constants';
+import { Player, PerformanceTag, Round, BottleSize, PresetBottleSize, Game } from '../types';
+import { PERFORMANCE_TAGS, BOTTLE_SIZES, MIN_DRINK_AMOUNT } from '../constants';
 
 export const calculateAverageDeviation = (deviations: number[]): number => {
   if (deviations.length === 0) return 0;
@@ -17,14 +17,75 @@ export const generateGameCode = (): string => {
   return result;
 };
 
+export const isPresetBottleSize = (bottleSize: BottleSize): bottleSize is PresetBottleSize =>
+  bottleSize in BOTTLE_SIZES;
+
+/** Füllmenge in Gramm (Bier ≈ 1 g/ml) – Voreinstellung oder eigene Menge. */
+export const getLiquidWeight = (bottleSize: BottleSize): number => {
+  if (isPresetBottleSize(bottleSize)) return BOTTLE_SIZES[bottleSize].liquidWeight;
+  const liters = parseFloat(bottleSize);
+  return Number.isFinite(liters) && liters > 0 ? Math.round(liters * 1000) : BOTTLE_SIZES['0.5'].liquidWeight;
+};
+
+/** Obergrenze für eingegebene Gewichte (Gefäß + Inhalt). */
+export const getMaxWeight = (bottleSize: BottleSize): number =>
+  isPresetBottleSize(bottleSize) ? BOTTLE_SIZES[bottleSize].maxWeight : getLiquidWeight(bottleSize) + 1500;
+
+/**
+ * Geschätzter Restinhalt eines Spielers in Gramm – bezogen auf sein eigenes
+ * Startgewicht, das Gefäßgewicht kürzt sich heraus. Nur eine Schätzung: die
+ * Füllmenge ist ein Nennwert.
+ */
+export const getRemainingLiquid = (player: Player, bottleSize: BottleSize): number | null => {
+  const first = player.weights[0];
+  const last = player.weights[player.weights.length - 1];
+  if (typeof first !== 'number' || typeof last !== 'number') return null;
+  return getLiquidWeight(bottleSize) - (first - last);
+};
+
 /** Füllstand der Flasche: 1 = voll, 0 = leer */
 export const getDrinkingProgress = (currentWeight: number, firstWeight: number, bottleSize: BottleSize): number => {
   if (firstWeight <= 0) return 1;
-  const { liquidWeight } = BOTTLE_SIZES[bottleSize];
   const drunk = firstWeight - currentWeight;
-  const drunkRatio = drunk / liquidWeight;
+  const drunkRatio = drunk / getLiquidWeight(bottleSize);
   const fillLevel = 1 - Math.min(Math.max(drunkRatio, 0), 1);
   return fillLevel;
+};
+
+/**
+ * Reicht der geschätzte Inhalt nur noch für ungefähr eine Runde?
+ * Das Ziel richtet sich nach dem leichtesten Spieler; wer schwerer ist, muss
+ * den Abstand zusätzlich trinken. Nach der nächsten Runde müsste bei jedem
+ * noch ein Mindestschluck übrig sein – sonst ist die nächste die letzte.
+ */
+export const isLastRoundByEstimate = (players: Player[], bottleSize: BottleSize): boolean => {
+  const lasts = players.map(p => p.weights[p.weights.length - 1]).filter((w): w is number => typeof w === 'number');
+  if (lasts.length === 0) return false;
+  const minWeight = Math.min(...lasts);
+  return players.some(p => {
+    const remaining = getRemainingLiquid(p, bottleSize);
+    const last = p.weights[p.weights.length - 1];
+    if (remaining === null || typeof last !== 'number') return false;
+    return remaining < (last - minWeight) + 2 * MIN_DRINK_AMOUNT;
+  });
+};
+
+export type LastRoundReason = 'extra' | 'player' | 'estimate';
+
+/**
+ * Warum die als nächstes startende Runde die letzte ist – oder null.
+ * - extra:    Host hat im Finale noch eine Runde angehängt
+ * - player:   jemand hat beim letzten Wiegen "Fast leer" gemeldet
+ * - estimate: laut Schätzung reicht der Inhalt nur noch für eine Runde
+ *             (der Host kann das mit "Weiterspielen" wegdrücken)
+ */
+export const getLastRoundReason = (game: Game): LastRoundReason | null => {
+  const prev = game.rounds[game.rounds.length - 1];
+  if (!prev) return null;
+  if (prev.isLastRound) return 'extra';
+  if (game.players.some(p => prev.almostEmpty?.[p.id])) return 'player';
+  if (!prev.continueDespiteEstimate && isLastRoundByEstimate(game.players, game.bottleSize)) return 'estimate';
+  return null;
 };
 
 /**

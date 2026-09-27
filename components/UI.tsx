@@ -175,7 +175,7 @@ export const Input: React.FC<{
       onKeyDown={onKeyDown}
       placeholder={placeholder}
       maxLength={maxLength}
-      className="bg-slate-900/50 border border-slate-700 rounded-2xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all text-white placeholder:text-slate-600"
+      className="w-full min-w-0 bg-slate-900/50 border border-slate-700 rounded-2xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all text-white placeholder:text-slate-600"
     />
   </div>
 );
