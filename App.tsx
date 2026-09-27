@@ -95,6 +95,7 @@ const App: React.FC = () => {
   const [joinError, setJoinError] = useState<string | null>(null);
   // Nach der Namenswahl kommt ein eigener Schritt fürs Getränk.
   const [drinkStep, setDrinkStep] = useState(false);
+  const [showPlayerSheet, setShowPlayerSheet] = useState(false);
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [weightInput, setWeightInput] = useState<string>('');
   const [drinkAmountInput, setDrinkAmountInput] = useState<string>('');
@@ -166,9 +167,9 @@ const App: React.FC = () => {
     if (!game || !myPlayerId) return;
     if (game.players.some(p => p.id === myPlayerId)) return;
     setMyPlayerId(null);
-    if (game.status === GameStatus.SETUP) {
-      setJoinError('Du bist nicht mehr in der Lobby – trag dich einfach nochmal ein.');
-    }
+    setJoinError(game.status === GameStatus.SETUP
+      ? 'Du bist nicht mehr in der Lobby – trag dich einfach nochmal ein.'
+      : 'Der Host hat dich aus dem Spiel genommen.');
   }, [game, myPlayerId]);
 
   // Session-Persistenz: beim Start automatisch wiederherstellen
@@ -349,6 +350,26 @@ const App: React.FC = () => {
     };
     updateGame(() => newGame);
   };
+
+  /**
+   * Host nimmt einen Spieler aus dem laufenden Spiel, damit die anderen nicht
+   * auf ihn warten müssen. Seine bisherigen Werte verschwinden mit ihm; wer
+   * wiegt, das Ziel wählt oder die Strafe vergibt, ergibt sich danach
+   * automatisch aus den verbliebenen Spielern.
+   */
+  const removePlayer = (playerId: string) => updateGameFresh(prev => {
+    if (!prev) return null;
+    const players = prev.players.filter(p => p.id !== playerId);
+    if (players.length === prev.players.length || players.length === 0) return prev;
+    const pendingInitialWeights = { ...(prev.pendingInitialWeights ?? {}) };
+    delete pendingInitialWeights[playerId];
+    // Hatte der Entfernte gerade die Strafe bekommen, wird sie neu vergeben.
+    const lastIdx = prev.rounds.length - 1;
+    const rounds = prev.status === GameStatus.ROUND_RESULT && prev.rounds[lastIdx]?.penaltyTargetId === playerId
+      ? prev.rounds.map((r, i) => i === lastIdx ? { ...r, penaltyTargetId: undefined } : r)
+      : prev.rounds;
+    return { ...prev, players, pendingInitialWeights, rounds };
+  });
 
   const loadDemoGame = useCallback(() => {
     devModeRef.current = true;
@@ -745,6 +766,10 @@ VITE_SUPABASE_ANON_KEY=...</pre>
             </div>
           )}
 
+          {!inSetup && joinError && (
+            <p className="text-red-400 text-xs font-bold mb-3 text-center">{joinError}</p>
+          )}
+
           {!inSetup && game.players.length === 0 && (
             <p className="text-slate-500 text-sm text-center">Spiel läuft bereits. Bitte wähle einen Spieler.</p>
           )}
@@ -826,6 +851,9 @@ VITE_SUPABASE_ANON_KEY=...</pre>
             <div className="text-xs font-bold text-slate-500 uppercase">Code: {game.gameCode}</div>
             {isCreator && game.status !== GameStatus.SETUP && game.status !== GameStatus.FINISHED && (
               <button onClick={goBack} className="text-slate-400 font-bold text-[10px] uppercase">← Zurück</button>
+            )}
+            {isCreator && game.status !== GameStatus.SETUP && game.status !== GameStatus.FINISHED && (
+              <button onClick={() => setShowPlayerSheet(true)} className="text-slate-400 font-bold text-[10px] uppercase">Spieler</button>
             )}
             {isCreator ? (
               <button onClick={() => { if (window.confirm("Spiel wirklich beenden?")) updateGame(() => null); }} className="text-red-500 font-bold text-[10px] uppercase underline">Beenden</button>
@@ -1509,6 +1537,56 @@ VITE_SUPABASE_ANON_KEY=...</pre>
           >↺ RESET</button>
         </div>
       )}
+
+      {/* ─── Host: Spieler im laufenden Spiel verwalten ─────────────────── */}
+      {showPlayerSheet && isCreator && (() => {
+        const isPeer = game.mode !== 'host';
+        const waitingOn = (p: Player): string | null => {
+          if (!isPeer) return null;
+          switch (game.status) {
+            case GameStatus.WEIGHING_INITIAL: return (game.pendingInitialWeights ?? {})[p.id] === undefined ? 'wiegt noch' : null;
+            case GameStatus.SETTING_TARGET: return minWeightPlayer?.id === p.id ? 'wählt das Ziel' : null;
+            case GameStatus.WEIGHING_FINAL: return currentRound && currentRound.finalWeights[p.id] === undefined ? 'wiegt noch' : null;
+            case GameStatus.ROUND_RESULT: return !penaltyTargetId && roundWinner?.id === p.id ? 'vergibt die Strafe' : null;
+            default: return null;
+          }
+        };
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-4" onClick={() => setShowPlayerSheet(false)}>
+            <div className="max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+              <Card>
+                <div className="flex justify-between items-center mb-1">
+                  <h2 className="text-lg font-bungee uppercase">Spieler</h2>
+                  <button onClick={() => setShowPlayerSheet(false)} className="text-slate-500 font-bold text-xs uppercase hover:text-slate-300">✕ Schließen</button>
+                </div>
+                <p className="text-slate-500 text-xs mb-4">Wer nicht mehr mitspielt, kann raus – dann wartet keiner mehr auf ihn.</p>
+                <div className="space-y-2">
+                  {game.players.map(p => {
+                    const waiting = waitingOn(p);
+                    const isMe = p.id === myPlayerId;
+                    return (
+                      <div key={p.id} className="flex items-center justify-between gap-3 p-3 bg-slate-900/40 rounded-xl">
+                        <div className="min-w-0">
+                          <div className="font-bold truncate">{p.name}{isMe && <span className="text-slate-500 font-normal"> (du)</span>}</div>
+                          {waiting && <div className="text-[10px] font-bold uppercase text-amber-500">⏳ {waiting}</div>}
+                        </div>
+                        {!isMe && (
+                          <button
+                            onClick={() => {
+                              if (window.confirm(`${p.name} aus dem Spiel entfernen? Die bisherigen Werte gehen dabei verloren.`)) removePlayer(p.id);
+                            }}
+                            className="shrink-0 px-3 py-2 rounded-lg border border-red-500/40 text-red-400 text-[10px] font-bold uppercase hover:bg-red-500/10"
+                          >Entfernen</button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+            </div>
+          </div>
+        );
+      })()}
 
       {showCheers && (
         <div className="fixed inset-0 z-50 pointer-events-none flex items-center justify-center">
