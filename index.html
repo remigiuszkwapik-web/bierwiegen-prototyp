@@ -62,16 +62,21 @@
             background-color: #0f172a;
             color: #f8fafc;
         }
+        .no-scrollbar { scrollbar-width: none; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
         .font-bungee {
             font-family: 'Bungee', cursive;
         }
         .beer-gradient {
             background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%);
         }
+        /* Reaktion in einer Listenzeile: gleich groß, leicht schlängelnd nach oben, dann weg. */
         @keyframes floatUp {
-          0% { transform: translateY(0) scale(1); opacity: 0; }
-          10% { opacity: 1; }
-          100% { transform: translateY(-80px) scale(1.5); opacity: 0; }
+          0%   { transform: translate(0, 0); opacity: 0; }
+          10%  { transform: translate(6px, -8px); opacity: 1; }
+          35%  { transform: translate(-6px, -28px); }
+          60%  { transform: translate(6px, -50px); opacity: 1; }
+          100% { transform: translate(-6px, -80px); opacity: 0; }
         }
         :root { --ac-500: 245 158 11; --ac-400: 251 191 36; --ac: rgb(var(--ac-500)); --ac-h: rgb(var(--ac-400)); --ac-s: rgb(var(--ac-500) / 0.25); }
         .ac-bg   { background-color: var(--ac) !important; }
@@ -80,6 +85,23 @@
         .ac-border { border-color: var(--ac) !important; }
         .ac-shadow { box-shadow: 0 10px 25px -5px var(--ac-s) !important; }
         .ac-ring:focus { outline: none; box-shadow: 0 0 0 2px var(--ac) !important; }
+        /* Reaktion an mich: steigt aus der Aktionsleiste auf. */
+        @keyframes reactionRise {
+          0%   { transform: translate(-50%, 0); opacity: 0; }
+          10%  { transform: translate(calc(-50% + var(--wig, 10px)), -26px); opacity: 1; }
+          30%  { transform: translate(calc(-50% - var(--wig, 10px)), -78px); }
+          50%  { transform: translate(calc(-50% + var(--wig, 10px)), -130px); }
+          70%  { transform: translate(calc(-50% - var(--wig, 10px)), -182px); opacity: 1; }
+          100% { transform: translate(calc(-50% + var(--wig, 10px)), -260px); opacity: 0; }
+        }
+        @keyframes reactionFade {
+          0%, 100% { opacity: 0; transform: translateX(-50%); }
+          15%, 70% { opacity: 1; transform: translateX(-50%); }
+        }
+        .reaction-rise { animation: reactionRise 3s ease-in-out forwards; }
+        @media (prefers-reduced-motion: reduce) {
+          .reaction-rise { animation-name: reactionFade; }
+        }
         @keyframes waveMove1 {
           0%   { transform: translateX(0); }
           100% { transform: translateX(-25%); }

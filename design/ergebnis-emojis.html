@@ -1,0 +1,307 @@
+<title>Ergebnis-Reaktionen</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Inter:wght@400;500;600;700;800&display=swap">
+<style>
+  /* Einzelnes, dunkles Farbschema – übernimmt die Tokens der App (slate + amber). */
+  :root {
+    color-scheme: dark;
+    --bg: #0b1120;
+    --app: #0f172a;
+    --card: rgba(30, 41, 59, .5);
+    --inset: rgba(15, 23, 42, .4);
+    --line: #334155;
+    --line-soft: #1e293b;
+    --text: #f8fafc;
+    --muted: #94a3b8;
+    --dim: #64748b;
+    --dimmer: #475569;
+    --ac: #f59e0b;
+    --ac-h: #fbbf24;
+    --green: #4ade80;
+    --red: #f87171;
+    --blue: #60a5fa;
+    --yellow: #fde047;
+    --display: 'Bungee', 'Arial Black', system-ui, sans-serif;
+    --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 15px; line-height: 1.5; padding-inline: 16px; padding-block: 40px 80px; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }
+
+  .wrap { max-width: 1240px; margin-inline: auto; display: flex; flex-direction: column; gap: 40px; }
+  .intro { display: flex; flex-direction: column; gap: 12px; max-width: 68ch; }
+  .eyebrow { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .12em; color: var(--ac); }
+  h1 { font-family: var(--display); font-weight: 400; font-size: clamp(28px, 5vw, 44px); line-height: 1.05; margin: 0; text-wrap: balance; }
+  .intro p { margin: 0; color: var(--muted); }
+
+  .variants { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 40px 28px; align-items: start; }
+  .variant { display: flex; flex-direction: column; gap: 18px; align-items: center; }
+  .v-head { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 4px; }
+  .v-head .tag { font-family: var(--display); font-size: 13px; color: var(--ac); }
+  .v-head h2 { margin: 0; font-size: 20px; font-weight: 800; }
+  .v-head p { margin: 0; font-size: 14px; color: var(--muted); }
+  .pc { width: 100%; max-width: 360px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; font-size: 13px; color: var(--muted); }
+  .pc h3 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .1em; }
+  .pc .pro h3 { color: var(--green); }
+  .pc .con h3 { color: var(--red); }
+  .pc ul { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 4px; }
+
+  /* ── Telefon ── */
+  .phone { width: 100%; max-width: 360px; height: 760px; border-radius: 44px; padding: 10px; background: #1f2937; box-shadow: 0 0 0 1px #374151, 0 30px 60px -20px rgba(0,0,0,.7); }
+  .screen { height: 100%; border-radius: 36px; overflow: hidden; position: relative; background: var(--app); display: flex; flex-direction: column; }
+  .statusbar { height: 34px; flex: none; display: flex; justify-content: space-between; align-items: center; padding: 0 24px; font-size: 12px; font-weight: 700; }
+  .statusbar .isl { width: 90px; height: 24px; background: #000; border-radius: 20px; }
+  .appbar { flex: none; display: flex; justify-content: space-between; align-items: flex-end; padding: 4px 16px 8px; }
+  .appbar small { display: block; font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--dim); }
+  .appbar b { font-family: var(--display); font-weight: 400; font-size: 20px; color: var(--ac); line-height: 1.1; }
+  .appbar .meta { display: flex; gap: 12px; font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--dim); }
+
+  .strip { flex: none; margin: 0 16px 8px; display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 16px; background: var(--card); border: 1px solid rgba(245,158,11,.3); }
+  .strip .beer { width: 16px; height: 34px; border: 1.5px solid var(--line); border-radius: 5px; background: #0f172a; overflow: hidden; display: flex; align-items: flex-end; flex: none; }
+  .strip .beer i { display: block; width: 100%; height: 62%; background: var(--ac); }
+  .strip .cells { flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .k { font-size: 8px; font-weight: 700; text-transform: uppercase; color: var(--dim); letter-spacing: .04em; }
+  .strip .v { font-family: var(--display); font-size: 13px; line-height: 1.2; }
+
+  .tabs { flex: none; display: grid; grid-template-columns: repeat(3, 1fr); margin: 0 16px 8px; background: #020617; border: 1px solid var(--line-soft); border-radius: 14px; padding: 3px; }
+  .tabs span { padding: 7px 4px; text-align: center; font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--dim); border-radius: 11px; }
+  .tabs span.on { background: #1e293b; box-shadow: inset 0 0 0 1px var(--line); color: var(--text); }
+
+  .page { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 16px 16px; display: flex; flex-direction: column; gap: 12px; scrollbar-width: none; }
+  .page::-webkit-scrollbar { display: none; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 22px; padding: 16px; }
+  .card.ac { border-color: rgba(245,158,11,.5); }
+  .card-title { font-family: var(--display); font-size: 16px; text-align: center; margin-bottom: 12px; }
+  .list { display: flex; flex-direction: column; gap: 8px; }
+  .d { font-family: var(--display); font-weight: 400; }
+
+  .res { position: relative; border-radius: 14px; border: 1px solid var(--line); background: var(--inset); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+  .res.win { background: rgba(34,197,94,.1); border-color: rgba(34,197,94,.3); }
+  .res.me { box-shadow: inset 0 0 0 1px rgba(245,158,11,.35); }
+  .res .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .res .who { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+  .nm { font-weight: 700; font-size: 14px; }
+  .you { font-size: 8px; font-weight: 700; text-transform: uppercase; color: var(--ac); }
+  .pill { font-size: 8px; font-weight: 700; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; }
+  .pill.g { color: #22c55e; background: rgba(34,197,94,.2); }
+  .pill.a { color: var(--ac); background: rgba(245,158,11,.2); }
+  .diff { text-align: right; }
+  .diff .d { font-size: 16px; line-height: 1.1; }
+  .diff .lbl { white-space: nowrap; font-size: 8px; font-weight: 700; text-transform: uppercase; color: var(--dim); }
+
+  .emo { display: flex; gap: 2px; background: rgba(15,23,42,.8); border: 1px solid var(--line); border-radius: 999px; padding: 2px; }
+  .emo button { border: 0; background: transparent; padding: 3px 4px; font-size: 14px; line-height: 1; border-radius: 99px; transition: transform .12s; }
+  .emo button:active { transform: scale(.85); }
+  .emo.sm button { font-size: 12px; padding: 3px 3px; }
+  .res .sub { display: flex; justify-content: flex-end; }
+
+  /* Variante B: Label + Leiste in einer Zeile */
+  .res .line2 { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .res .line2 .lbl { white-space: nowrap; font-size: 8px; font-weight: 700; text-transform: uppercase; color: var(--dim); }
+
+  /* Variante C: Tippen öffnet die Leiste */
+  .res.tap { cursor: pointer; }
+  .react-hint { flex: none; white-space: nowrap; border: 1px solid var(--line); background: rgba(15,23,42,.6); border-radius: 99px; font-size: 11px; padding: 2px 7px; color: var(--muted); display: inline-flex; align-items: center; gap: 2px; }
+  .res .reveal { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .2s ease; }
+  .res .reveal > div { overflow: hidden; display: flex; justify-content: flex-end; }
+  .res.open .reveal { grid-template-rows: 1fr; }
+  .res.open .react-hint { border-color: var(--ac); color: var(--ac); }
+
+  .note-sm { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--muted); text-align: center; margin-top: 10px; }
+  .pen-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .pen-grid button { border: 1px solid #475569; background: #1e293b; border-radius: 12px; padding: 9px; font-weight: 700; font-size: 13px; }
+
+  .dock { flex: none; padding: 10px 16px 14px; border-top: 1px solid var(--line-soft); background: var(--app); }
+  .btn { display: block; width: 100%; border: 0; border-radius: 16px; padding: 13px; font-family: var(--display); font-size: 14px; background: var(--ac); color: #0f172a; }
+  .btn:disabled { opacity: .45; }
+
+  /* Fliegendes Emoji: bleibt gleich groß, schlängelt nach oben, verblasst (wie in der App). */
+  .fly { position: absolute; right: 60px; top: 0; font-size: 20px; pointer-events: none; animation: rise 1.8s ease-in-out forwards; z-index: 5; }
+  @keyframes rise {
+    0%   { transform: translate(0, 0); opacity: 0; }
+    10%  { transform: translate(var(--wig), -8px); opacity: 1; }
+    35%  { transform: translate(calc(var(--wig) * -1), -26px); }
+    60%  { transform: translate(var(--wig), -44px); opacity: 1; }
+    100% { transform: translate(calc(var(--wig) * -1), -70px); opacity: 0; }
+  }
+
+  .notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+  .note { border: 1px solid var(--line-soft); background: #0f172a; border-radius: 20px; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
+  .note h2 { margin: 0; font-size: 17px; font-weight: 800; }
+  .note.rec { border-color: rgba(245,158,11,.45); }
+  .note.rec h2 { color: var(--ac); }
+  .note p, .note li { color: var(--muted); font-size: 14px; margin: 0; }
+  .note ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+  .note b { color: var(--text); font-weight: 600; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .fly { animation-name: fade; }
+    @keyframes fade { 0%, 100% { opacity: 0; } 20%, 70% { opacity: 1; } }
+    .res .reveal { transition: none; }
+  }
+</style>
+
+<div class="wrap">
+  <header class="intro">
+    <span class="eyebrow">Designentwurf · Rundenergebnis</span>
+    <h1>Emojis auch im Rundenergebnis</h1>
+    <p>Drei Varianten, wie die Emoji-Leiste in die Ergebnis-Liste einer Runde passt, ohne die Strafen-Auswahl darunter zu weit nach unten zu schieben. Beispiel: Du bist Max und hast die Runde gewonnen. Die Emojis sind antippbar, das Emoji steigt dann wie in der App auf.</p>
+  </header>
+
+  <section class="variants">
+    <article class="variant">
+      <div class="v-head">
+        <span class="tag">A · Wie im Ranking</span>
+        <h2>Leiste unter jeder Zeile</h2>
+        <p>Genau das Muster aus dem Ranking: eine eigene Zeile mit der Emoji-Leiste unter jedem Mitspieler.</p>
+      </div>
+      <div class="phone"><div class="screen" data-variant="a"></div></div>
+      <div class="pc">
+        <div class="pro"><h3>Pro</h3><ul><li>Identisch zum Ranking, nichts Neues zu lernen</li><li>Große Tippflächen</li></ul></div>
+        <div class="con"><h3>Contra</h3><ul><li>Karte wird ca. 120 px höher</li><li>Strafen-Auswahl rutscht aus dem Bild</li></ul></div>
+      </div>
+    </article>
+
+    <article class="variant">
+      <div class="v-head">
+        <span class="tag">B · Integriert</span>
+        <h2>Leiste in der zweiten Zeile</h2>
+        <p>„Zu viel getrunken“ wandert nach links unter den Namen, rechts daneben sitzt eine kompakte Leiste. Die Zeile wird kaum höher.</p>
+      </div>
+      <div class="phone"><div class="screen" data-variant="b"></div></div>
+      <div class="pc">
+        <div class="pro"><h3>Pro</h3><ul><li>Immer sichtbar, fast ohne Mehrhöhe</li><li>Strafen-Auswahl bleibt im Bild</li></ul></div>
+        <div class="con"><h3>Contra</h3><ul><li>Emojis etwas kleiner (ca. 26 px Tippfläche)</li><li>Zeile wirkt dichter</li></ul></div>
+      </div>
+    </article>
+
+    <article class="variant">
+      <div class="v-head">
+        <span class="tag">C · Auf Tippen</span>
+        <h2>Zeile antippen öffnet die Leiste</h2>
+        <p>Die Liste bleibt wie heute. Ein kleines 😀+ zeigt, dass man reagieren kann; ein Tipp auf die Zeile klappt die Leiste auf.</p>
+      </div>
+      <div class="phone"><div class="screen" data-variant="c"></div></div>
+      <div class="pc">
+        <div class="pro"><h3>Pro</h3><ul><li>Ergebnis bleibt ruhig und lesbar</li><li>Volle Größe der Emojis</li></ul></div>
+        <div class="con"><h3>Contra</h3><ul><li>Ein Tipp mehr</li><li>Anders als im Ranking</li></ul></div>
+      </div>
+    </article>
+  </section>
+
+  <section class="notes">
+    <div class="note rec">
+      <h2>Empfehlung: B</h2>
+      <p>Das Ergebnis ist der Moment, in dem am meisten reagiert wird. Deshalb sollte die Leiste ohne Extra-Tipp da sein. B schafft das, ohne die Strafen-Auswahl des Rundensiegers aus dem Bild zu schieben. Die Tippflächen sind so groß wie die heutige Leiste im Ranking.</p>
+    </div>
+    <div class="note">
+      <h2>Gilt für alle Varianten</h2>
+      <ul>
+        <li><b>Deine eigene Zeile</b> bekommt keine Leiste, sie ist nur hervorgehoben.</li>
+        <li>Getippte Emojis steigen <b>in der Zeile des Empfängers</b> auf. Beim Empfänger selbst kommen sie wie gehabt über dem Button unten hoch.</li>
+        <li>Die Gesamtwertung im zweiten Tab bleibt ohne Emojis, damit sie übersichtlich bleibt.</li>
+      </ul>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+  const ME = 'Max';
+  const result = [
+    { name: 'Max',  diff: 3 },
+    { name: 'Ben',  diff: 4 },
+    { name: 'Anna', diff: -12 },
+    { name: 'Lisa', diff: -19 },
+  ];
+  const EMOJIS = ['🍻', '🔥', '🎯', '💀', '🤡', '🚀'];
+  const emoBar = (small) => `<div class="emo${small ? ' sm' : ''}">${EMOJIS.map(e => `<button type="button" data-emo="${e}" aria-label="${e} senden">${e}</button>`).join('')}</div>`;
+  const label = d => d === 0 ? 'Punktgelandet' : d > 0 ? 'Zu wenig getrunken' : 'Zu viel getrunken';
+  const color = d => d === 0 ? 'var(--green)' : d > 0 ? 'var(--red)' : 'var(--blue)';
+
+  function row(p, i, variant) {
+    const me = p.name === ME;
+    const win = i === 0, lose = i === result.length - 1;
+    const cls = ['res', win ? 'win' : '', me ? 'me' : '', variant === 'c' && !me ? 'tap' : ''].join(' ');
+    const pills = `${me ? '<span class="you">Du</span>' : ''}${win ? '<span class="pill g">Rundensieger</span>' : ''}${lose ? '<span class="pill a">Rundenverlierer</span>' : ''}`;
+    const diffBig = `<div class="d" style="font-size:16px;color:${color(p.diff)}">${p.diff > 0 ? '+' : ''}${p.diff}g</div>`;
+
+    if (variant === 'b') {
+      return `<div class="${cls}">
+        <div class="top"><div class="who"><span class="nm">${p.name}</span>${pills}</div>${diffBig}</div>
+        <div class="line2"><span class="lbl">${label(p.diff)}</span>${me ? '' : emoBar(true)}</div>
+      </div>`;
+    }
+    const top = `<div class="top"><div class="who"><span class="nm">${p.name}</span>${pills}</div>
+      <div style="display:flex;align-items:center;gap:8px">${variant === 'c' && !me ? '<span class="react-hint" aria-hidden="true">😀+</span>' : ''}
+      <div class="diff">${diffBig}<div class="lbl">${label(p.diff)}</div></div></div></div>`;
+    if (variant === 'a') return `<div class="${cls}">${top}${me ? '' : `<div class="sub">${emoBar(false)}</div>`}</div>`;
+    return `<div class="${cls}" ${me ? '' : 'role="button" tabindex="0" aria-expanded="false"'}>${top}${me ? '' : `<div class="reveal"><div>${emoBar(false)}</div></div>`}</div>`;
+  }
+
+  function screen(variant) {
+    return `
+      <div class="statusbar"><span>22:07</span><span class="isl"></span><span>5G ▮▮▮</span></div>
+      <div class="appbar"><div><small>Spieler</small><b>MAX 🍺</b></div><div class="meta"><span>Code: DEMO</span><span>Verlassen</span></div></div>
+      <div class="strip"><div class="beer"><i></i></div><div class="cells">
+        <div><div class="k">Gewicht</div><div class="v">551g</div></div>
+        <div><div class="k">Ø Abw.</div><div class="v" style="color:var(--ac)">2.3g</div></div>
+        <div><div class="k">Platz</div><div class="v">#1</div></div>
+        <div><div class="k">Trend</div><div class="v" style="color:var(--red)">↓</div></div>
+      </div></div>
+      <div class="tabs"><span class="on">Ergebnis •</span><span>Gesamt</span><span>Details</span></div>
+      <div class="page">
+        <div class="card">
+          <div class="card-title">ERGEBNIS</div>
+          <div class="list">${result.map((p, i) => row(p, i, variant)).join('')}</div>
+          <div class="note-sm">Der Rundenverlierer trinkt mit dem Strafen-Empfänger einen Kurzen.</div>
+        </div>
+        <div class="card ac">
+          <div class="d" style="text-align:center;font-size:13px">DU HAST GEWONNEN!</div>
+          <div style="text-align:center;font-size:12px;color:var(--muted);margin:4px 0 12px">Wem gibst du die Strafe?</div>
+          <div class="pen-grid">${result.map(p => `<button type="button">${p.name}</button>`).join('')}</div>
+        </div>
+      </div>
+      <div class="dock"><button class="btn" type="button" disabled>NÄCHSTE RUNDE</button></div>`;
+  }
+
+  document.querySelectorAll('.screen').forEach(el => {
+    const variant = el.dataset.variant;
+    el.innerHTML = screen(variant);
+
+    el.addEventListener('click', ev => {
+      const emo = ev.target.closest('[data-emo]');
+      if (emo) {
+        ev.stopPropagation();
+        const rowEl = emo.closest('.res');
+        const f = document.createElement('span');
+        f.className = 'fly';
+        f.textContent = emo.dataset.emo;
+        f.style.setProperty('--wig', `${(Math.random() < .5 ? -1 : 1) * (5 + Math.random() * 6)}px`);
+        f.style.right = `${20 + Math.random() * 90}px`;
+        rowEl.appendChild(f);
+        f.addEventListener('animationend', () => f.remove());
+        return;
+      }
+      if (variant === 'c') {
+        const rowEl = ev.target.closest('.res.tap');
+        if (!rowEl) return;
+        const open = !rowEl.classList.contains('open');
+        el.querySelectorAll('.res.open').forEach(r => { r.classList.remove('open'); r.setAttribute('aria-expanded', 'false'); });
+        if (open) { rowEl.classList.add('open'); rowEl.setAttribute('aria-expanded', 'true'); }
+      }
+    });
+    el.addEventListener('keydown', ev => {
+      if (variant !== 'c' || (ev.key !== 'Enter' && ev.key !== ' ')) return;
+      const rowEl = ev.target.closest('.res.tap');
+      if (rowEl && ev.target === rowEl) { ev.preventDefault(); rowEl.click(); }
+    });
+  });
+
+  // Variante C startet mit einer geöffneten Zeile, damit man das Prinzip direkt sieht.
+  const firstC = document.querySelector('[data-variant="c"] .res.tap');
+  if (firstC) { firstC.classList.add('open'); firstC.setAttribute('aria-expanded', 'true'); }
+})();
+</script>

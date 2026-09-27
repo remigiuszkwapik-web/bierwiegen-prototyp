@@ -4,7 +4,7 @@ import Lottie from 'lottie-react';
 import cheersAnimation from './src/assets/cheers.json';
 import { Game, GameStatus, Player, Round, Reaction, Ping, PresetBottleSize, DrinkType } from './types';
 import { SupabaseGameRepository, isSupabaseConfigured } from './repositories/GameRepository';
-import { Card, Button, Input, BeerProgressBar, FloatingReaction, EmojiBar, PlacementCard } from './components/UI';
+import { Card, Button, Input, FloatingReaction, RisingReaction, EmojiBar, PlacementCard, SwipeTabs, SwipePage, DotBadge, CountBadge } from './components/UI';
 import { BOTTLE_SIZES, DRINK_THEMES, DRINK_STORAGE_KEY, applyDrinkTheme, MIN_DRINK_AMOUNT, CUSTOM_VOLUME_MIN, CUSTOM_VOLUME_MAX } from './constants';
 import {
   calculateAverageDeviation,
@@ -127,6 +127,12 @@ const App: React.FC = () => {
   const channelRef = useRef<ReturnType<typeof repo.subscribeToGame> | null>(null);
   // Pings pro Spieler-ID: wann zuletzt angepingt und von wem. Lebt nur lokal.
   const [pings, setPings] = useState<Record<string, { at: number; from: string }>>({});
+  // Aktive Seite im In-Game-Dashboard (0 = Aufgabe, 1 = Ranking, 2 = Details).
+  const [activePage, setActivePage] = useState(0);
+  // Neue Phase oder angepingt → zurück zur Aufgabe, dort passiert jetzt etwas.
+  useEffect(() => { setActivePage(0); }, [game?.status, game?.currentRoundIndex]);
+  const myPingAt = myPlayerId ? pings[myPlayerId]?.at : undefined;
+  useEffect(() => { if (myPingAt) setActivePage(0); }, [myPingAt]);
 
   const gameRef = useRef<Game | null>(null);
   useEffect(() => { gameRef.current = game; }, [game]);
@@ -910,6 +916,21 @@ VITE_SUPABASE_ANON_KEY=...</pre>
     setPings(prev => ({ ...prev, [p.id]: { at: Date.now(), from: ping.fromName } }));
     if (channelRef.current) repo.sendPing(channelRef.current, ping);
   };
+  const sendReaction = (targetPlayerId: string, emoji: string) => {
+    const reaction: Reaction = { id: createId(), emoji, targetPlayerId, timestamp: Date.now() };
+    // Sofort selbst anzeigen: Broadcast schickt dem Absender
+    // seine eigene Nachricht nicht zurueck (self: false).
+    setReactions(prev => [...recentReactions(prev), reaction]);
+    if (channelRef.current) repo.sendReaction(channelRef.current, reaction);
+  };
+  const floatingReactionsFor = (playerId: string) => (
+    <div className="relative">
+      {recentReactions(reactions)
+        .filter(r => r.targetPlayerId === playerId)
+        .map(r => <FloatingReaction key={r.id} emoji={r.emoji} />)}
+    </div>
+  );
+
   const pingButton = (player: Player) => (
     <button
       type="button"
@@ -927,121 +948,80 @@ VITE_SUPABASE_ANON_KEY=...</pre>
     : myWaiting === 'vergibt die Strafe' ? 'Du bist dran – vergib die Strafe!'
     : 'Trag dein Gewicht ein!';
 
-  return (
-    <div className={`min-h-screen${devMode ? ' pb-20' : ''}`}>
-      <div className="p-4 max-w-2xl mx-auto space-y-6">
-
-        {syncError && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-2xl px-4 py-3 flex items-start gap-3">
-            <span className="text-lg leading-none">⚠️</span>
-            <div className="flex-1">
-              <p className="text-red-400 text-xs font-bold uppercase">Nicht gespeichert</p>
-              <p className="text-slate-400 text-[11px] mt-0.5">Dein Spielstand konnte nicht synchronisiert werden. Die anderen sehen deine Eingabe evtl. nicht.</p>
+  // ─── Dashboard-Seiten ──────────────────────────────────────────────────
+  // Details-Seite: alles, was über den festen Werte-Streifen hinausgeht.
+  const myCardContent = myPlayer && (() => {
+    const devs = myPlayer.deviations;
+    const tag = getPlayerPerformanceTag(myPlayer, game.players, game.rounds);
+    const best = devs.length ? Math.min(...devs) : null;
+    const worst = devs.length ? Math.max(...devs) : null;
+    const last = devs.length ? devs[devs.length - 1] : null;
+    const wins = getRoundWins(myPlayer.id, game.players, game.rounds);
+    const current = lastWeight(myPlayer);
+    const drunk = current !== null && myPlayer.weights[0] ? myPlayer.weights[0] - current : null;
+    const stat = (label: string, value: React.ReactNode, color = 'text-white') => (
+      <div className="min-w-0">
+        <div className="text-[10px] font-bold text-slate-500 uppercase truncate">{label}</div>
+        <div className={`text-lg font-bungee ${color}`}>{value}</div>
+      </div>
+    );
+    return (
+      <>
+        <Card className="border-amber-500/30">
+          <div className="flex items-center gap-3">
+            <span className="text-3xl leading-none">{tag.icon}</span>
+            <div className="min-w-0">
+              <div className="font-bungee text-amber-500 uppercase">{tag.label}</div>
+              <p className="text-xs text-slate-400">{tag.description}</p>
             </div>
-            <button onClick={() => setSyncError(null)} className="text-slate-500 text-xs font-bold hover:text-slate-300">✕</button>
           </div>
-        )}
+        </Card>
 
-        {/* Header */}
-        <header className="flex justify-between items-end">
-          <div>
-            <p className="text-[10px] text-slate-500 font-bold uppercase">Spieler</p>
-            <h1 className="text-2xl font-bungee text-amber-500 flex items-center gap-2">
-              {myPlayer?.name ?? '...'}
-              <button
-                onClick={() => {
-                  const keys = Object.keys(DRINK_THEMES) as DrinkType[];
-                  setMyDrink(keys[(keys.indexOf(myDrink) + 1) % keys.length]);
-                }}
-                title={`Getränk: ${DRINK_THEMES[myDrink].label} (tippen zum Wechseln)`}
-                className="text-lg leading-none"
-              >{DRINK_THEMES[myDrink].emoji}</button>
-            </h1>
+        <Card>
+          <h2 className="text-xs font-bold text-slate-500 uppercase mb-3">Deine Statistik</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-4">
+            {stat('Letzte', last != null ? `${last}g` : '—')}
+            {stat('Beste', best != null ? `${best}g` : '—', 'text-green-400')}
+            {stat('Schlechteste', worst != null ? `${worst}g` : '—', 'text-red-400')}
+            {stat('Siege', wins, 'text-amber-400')}
+            {stat('Kassiert', myPlayer.penalties)}
+            {stat('Verteilt', getPenaltiesGiven(myPlayer.id, game.players, game.rounds))}
+            {stat('Getrunken', drunk != null ? `${drunk}g` : '—')}
+            {stat('Runden', devs.length)}
           </div>
-          <div className="flex items-center gap-4 text-right">
-            <div className="text-xs font-bold text-slate-500 uppercase">Code: {game.gameCode}</div>
-            {isCreator && game.status !== GameStatus.SETUP && game.status !== GameStatus.FINISHED && (
-              <button onClick={goBack} className="text-slate-400 font-bold text-[10px] uppercase">← Zurück</button>
-            )}
-            {isCreator ? (
-              <button onClick={() => { if (window.confirm("Spiel wirklich beenden?")) updateGame(() => null); }} className="text-red-500 font-bold text-[10px] uppercase underline">Beenden</button>
-            ) : (
-              <button onClick={() => { setGame(null); setMyPlayerId(null); localStorage.removeItem('bierwiegen_last_session'); localStorage.removeItem('bierwiegen_player_id'); }} className="text-slate-500 font-bold text-[10px] uppercase">Verlassen</button>
-            )}
-          </div>
-        </header>
+        </Card>
 
-        {/* My player card */}
-        {myPlayer && (
-          <Card className="border-amber-500/30">
-            {(() => {
-              const devs = myPlayer.deviations;
-              const tag = getPlayerPerformanceTag(myPlayer, game.players, game.rounds);
-              const best = devs.length ? Math.min(...devs) : null;
-              const worst = devs.length ? Math.max(...devs) : null;
-              const last = devs.length ? devs[devs.length - 1] : null;
-              const wins = getRoundWins(myPlayerId!, game.players, game.rounds);
-              return (
-                <div className="flex items-start gap-4">
-                  <BeerProgressBar progress={getDrinkingProgress(myPlayer.weights.slice(-1)[0] || 0, myPlayer.weights[0] || 0, game.bottleSize)} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-end gap-8 mb-1">
-                      <div>
-                        <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">Gewicht</div>
-                        <div className="text-4xl font-bungee text-white">{myPlayer.weights.slice(-1)[0] || 0}g</div>
-                      </div>
-                      <div>
-                        <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">Trend</div>
-                        <div className={`text-4xl font-bungee ${getDeviationTrend(devs).color}`}>{getDeviationTrend(devs).label}</div>
-                      </div>
+        {devs.length > 0 && (
+          <Card>
+            <h2 className="text-xs font-bold text-slate-500 uppercase mb-3">Rundenverlauf</h2>
+            <div className="flex gap-1.5">
+              {devs.map((dev, idx) => {
+                const playersWithDev = game.players.filter(p => p.deviations[idx] !== undefined);
+                const isWin = dev === Math.min(...playersWithDev.map(p => p.deviations[idx]));
+                const finalWeight = myPlayer.weights[idx + 1];
+                const target = game.rounds[idx]?.targetWeight;
+                const tooLittle = finalWeight != null && target != null && finalWeight > target;
+                const tooMuch = finalWeight != null && target != null && finalWeight < target;
+                return (
+                  <div key={idx} className={`flex-1 rounded-lg px-1 py-1.5 text-center border ${isWin ? 'bg-amber-500/10 border-amber-500/40' : 'bg-slate-800/60 border-slate-700'}`}>
+                    <div className={`text-[8px] font-bold uppercase mb-0.5 ${isWin ? 'text-amber-500' : 'text-slate-600'}`}>{isWin ? '★' : `R${idx + 1}`}</div>
+                    <div className="flex items-center justify-center gap-0.5 leading-none">
+                      <div className={`text-xs font-bungee ${isWin ? 'text-amber-400' : 'text-slate-300'}`}>{dev}g</div>
+                      <div className={`text-[8px] font-bold ${tooLittle ? 'text-red-400' : tooMuch ? 'text-blue-400' : 'text-green-400'}`}>{tooLittle ? '+' : tooMuch ? '-' : '●'}</div>
                     </div>
-                    <div className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1 mb-3">
-                      {tag.icon} {tag.label}
-                    </div>
-                    <div className="flex items-start gap-1 mb-3">
-                      <div className="grid grid-cols-4 gap-1 flex-1 min-w-0">
-                        <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Letzt.</div><div className="text-xs font-bungee text-white">{last ?? '—'}{last != null ? 'g' : ''}</div></div>
-                        <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Beste</div><div className="text-xs font-bungee text-green-400">{best ?? '—'}{best != null ? 'g' : ''}</div></div>
-                        <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Schle.</div><div className="text-xs font-bungee text-red-400">{worst ?? '—'}{worst != null ? 'g' : ''}</div></div>
-                        <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Siege</div><div className="text-xs font-bungee text-amber-400">{wins}</div></div>
-                      </div>
-                      <div className="w-px self-stretch bg-slate-700 mx-1" />
-                      <div className="grid grid-cols-2 gap-1">
-                        <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Kass.</div><div className="text-xs font-bungee text-white">{myPlayer.penalties}</div></div>
-                        <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Vert.</div><div className="text-xs font-bungee text-white">{getPenaltiesGiven(myPlayerId!, game.players, game.rounds)}</div></div>
-                      </div>
-                    </div>
-                    {devs.length > 0 && (
-                      <>
-                        <div className="text-[9px] text-slate-600 font-bold uppercase mb-1">Rundenverlauf</div>
-                        <div className="flex gap-1.5">
-                          {devs.map((dev, idx) => {
-                            const playersWithDev = game.players.filter(p => p.deviations[idx] !== undefined);
-                            const isWin = dev === Math.min(...playersWithDev.map(p => p.deviations[idx]));
-                            const finalWeight = myPlayer.weights[idx + 1];
-                            const target = game.rounds[idx]?.targetWeight;
-                            const tooLittle = finalWeight != null && target != null && finalWeight > target;
-                            const tooMuch = finalWeight != null && target != null && finalWeight < target;
-                            return (
-                              <div key={idx} className={`flex-1 rounded-lg px-1 py-1.5 text-center border ${isWin ? 'bg-amber-500/10 border-amber-500/40' : 'bg-slate-800/60 border-slate-700'}`}>
-                                <div className={`text-[8px] font-bold uppercase mb-0.5 ${isWin ? 'text-amber-500' : 'text-slate-600'}`}>{isWin ? '★' : `R${idx + 1}`}</div>
-                                <div className="flex items-center justify-center gap-0.5 leading-none">
-                                  <div className={`text-xs font-bungee ${isWin ? 'text-amber-400' : 'text-slate-300'}`}>{dev}g</div>
-                                  <div className={`text-[8px] font-bold ${tooLittle ? 'text-red-400' : tooMuch ? 'text-blue-400' : 'text-green-400'}`}>{tooLittle ? '+' : tooMuch ? '-' : '●'}</div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </>
-                    )}
                   </div>
-                </div>
-              );
-            })()}
+                );
+              })}
+            </div>
+            <p className="text-[10px] text-slate-500 mt-2"><span className="text-red-400 font-bold">+</span> zu wenig · <span className="text-blue-400 font-bold">-</span> zu viel getrunken · ★ Rundensieg</p>
           </Card>
         )}
+      </>
+    );
+  })();
 
+  const taskContent = (
+    <>
         {/* ─── WEIGHING_INITIAL ──────────────────────────────────────────────── */}
         {/* ─── SETUP (Spieler bereits gewählt) ───────────────────────────────── */}
         {game.status === GameStatus.SETUP && (
@@ -1064,13 +1044,6 @@ VITE_SUPABASE_ANON_KEY=...</pre>
               ))}
             </div>
             {isCreator && (
-              <Button
-                onClick={() => updateGameFresh(p => p ? { ...p, status: GameStatus.WEIGHING_INITIAL } : null)}
-                disabled={game.players.length < 1}
-                className="w-full py-4 text-xl font-bungee"
-              >START</Button>
-            )}
-            {isCreator && (
               <button
                 onClick={() => { const url = new URL(window.location.href); url.searchParams.set('code', game.gameCode); navigator.clipboard.writeText(url.toString()); setCopyFeedback(true); setTimeout(() => setCopyFeedback(false), 2000); }}
                 className={`w-full mt-3 text-[10px] font-bold uppercase py-2 rounded-lg border transition-colors ${copyFeedback ? 'text-green-500 border-green-500/30' : 'text-slate-400 border-slate-700'}`}
@@ -1091,7 +1064,7 @@ VITE_SUPABASE_ANON_KEY=...</pre>
               return (
                 <Card>
                   <h2 className="text-xl font-bungee text-center mb-6 uppercase">Initialwiegen</h2>
-                  <div className="space-y-3 mb-6">
+                  <div className="space-y-3">
                     {game.players.map(p => (
                       <div key={p.id} className="flex items-center justify-between p-3 bg-slate-900/40 rounded-xl">
                         <div className="font-bold">{p.name}</div>
@@ -1113,25 +1086,6 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                       </div>
                     ))}
                   </div>
-                  <Button
-                    onClick={() => {
-                      if (!game.players.every(p => inputs[p.id] && parseInt(inputs[p.id]) >= 1 && parseInt(inputs[p.id]) <= maxW)) {
-                        alert(`Bitte gültige Gewichte eingeben (1–${maxW}g)`);
-                        return;
-                      }
-                      updateGame(prev => {
-                        if (!prev) return null;
-                        return {
-                          ...prev,
-                          status: GameStatus.SETTING_TARGET,
-                          players: prev.players.map(p => ({ ...p, weights: [parseInt(inputs[p.id])] })),
-                          pendingInitialWeights: {},
-                        };
-                      });
-                      setInputs({});
-                    }}
-                    className="w-full py-4 font-bungee"
-                  >FERTIG</Button>
                 </Card>
               );
             }
@@ -1180,16 +1134,6 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                       <span className="absolute right-3 text-slate-400 font-bungee text-2xl pointer-events-none">G</span>
                     </div>
                   </div>
-                  <Button
-                    onClick={() => {
-                      if (!myPlayerId) return;
-                      const val = parseInt(weightInput);
-                      if (!val || val < 1 || val > maxW) { alert(`Bitte gültiges Gewicht eingeben (1–${maxW}g)`); return; }
-                      updateGame(prev => prev ? { ...prev, pendingInitialWeights: { ...(prev.pendingInitialWeights ?? {}), [myPlayerId]: val } } : null);
-                      setWeightInput('');
-                    }}
-                    className="w-full py-4 font-bungee"
-                  >EINWIEGEN</Button>
                 </div>
               )}
               <div className="mt-4 space-y-1">
@@ -1266,6 +1210,8 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                     max={100}
                     value={drinkAmountInput || DEFAULT_DRINK_AMOUNT}
                     onChange={(e) => setDrinkAmountInput(e.target.value)}
+                    // Waagrechtes Ziehen gehört dem Slider, nicht dem Seiten-Wischen.
+                    style={{ touchAction: 'pan-y' }}
                     className="w-full accent-amber-500"
                   />
                   <div className="flex justify-between text-xs text-slate-500 font-bold mt-1">
@@ -1273,33 +1219,6 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                     <span>100g</span>
                   </div>
                 </div>
-                <Button
-                  onClick={() => {
-                    // Ohne Antippen eines Presets stand hier NaN und der Knopf tat
-                    // stillschweigend nichts – obwohl die Karte 30g anzeigt.
-                    const parsed = parseInt(drinkAmountInput);
-                    const amount = Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_DRINK_AMOUNT;
-                    updateGame(prev => {
-                      if (!prev) return null;
-                      const currentMin = minLastWeight(prev.players);
-                      if (currentMin === null) return prev;
-                      return {
-                        ...prev,
-                        status: GameStatus.DRINKING,
-                        rounds: [...prev.rounds, {
-                          roundNumber: prev.rounds.length + 1,
-                          targetWeight: currentMin - amount,
-                          chooserPlayerId: myPlayerId ?? '',
-                          initialWeights: {},
-                          finalWeights: {},
-                          isLastRound: getLastRoundReason(prev) !== null,
-                        }],
-                      };
-                    });
-                    setDrinkAmountInput('');
-                  }}
-                  className="w-full py-4 font-bungee"
-                >RUNDE STARTEN</Button>
               </div>
             </Card>
           ) : (
@@ -1323,16 +1242,12 @@ VITE_SUPABASE_ANON_KEY=...</pre>
               {currentRound?.isLastRound && <div className="inline-block mb-3 px-3 py-1 rounded-full bg-amber-500 text-slate-900 text-[10px] font-bungee uppercase">Letzte Runde</div>}
               <h2 className="text-xs font-bold text-amber-500 uppercase mb-2">Ziel</h2>
               <div className="text-6xl font-bungee text-white mb-2">{currentRound?.targetWeight}g</div>
-              <div className="bg-slate-900 rounded-xl px-4 py-3 mb-6 inline-block">
+              <div className="bg-slate-900 rounded-xl px-4 py-3 inline-block">
                 <span className="text-[10px] font-bold text-slate-500 uppercase">Trink</span>
                 <div className="text-2xl font-bungee text-amber-400">{myDrinkAmount}g</div>
               </div>
-              {game.mode === 'host' ? (
-                isCreator
-                  ? <Button onClick={() => updateGame(p => p ? { ...p, status: GameStatus.WEIGHING_FINAL } : null)} className="w-full py-4 font-bungee">WIEGEN</Button>
-                  : <p className="text-slate-500 text-xs font-bold uppercase mt-4">Host startet das Wiegen...</p>
-              ) : (
-                <Button onClick={() => updateGame(p => p ? { ...p, status: GameStatus.WEIGHING_FINAL } : null)} className="w-full py-4 font-bungee">WIEGEN</Button>
+              {game.mode === 'host' && !isCreator && (
+                <p className="text-slate-500 text-xs font-bold uppercase mt-6">Host startet das Wiegen...</p>
               )}
             </Card>
           );
@@ -1352,7 +1267,7 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                     <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Ziel</p>
                     <div className="text-4xl font-bungee text-amber-500">{currentRound?.targetWeight}g</div>
                   </div>
-                  <div className="space-y-3 mb-6">
+                  <div className="space-y-3">
                     {game.players.map(p => {
                       const maxForP = p.weights[0] || maxW;
                       return (
@@ -1384,35 +1299,6 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                       );
                     })}
                   </div>
-                  <Button
-                    onClick={() => {
-                      const invalid = game.players.find(p => {
-                        const val = parseInt(inputs[p.id]);
-                        const maxForP = p.weights[0] || maxW;
-                        return !inputs[p.id] || isNaN(val) || val < 0 || val > maxForP;
-                      });
-                      if (invalid) { alert(`Ungültiger Wert für ${invalid.name}`); return; }
-                      updateGame(prev => {
-                        if (!prev) return null;
-                        const target = prev.rounds.slice(-1)[0].targetWeight;
-                        const lastIdx = prev.rounds.length - 1;
-                        const almostEmpty = Object.fromEntries(Object.entries(almostEmptyInputs).filter(([, v]) => v));
-                        return {
-                          ...prev,
-                          status: GameStatus.ROUND_RESULT,
-                          rounds: prev.rounds.map((r, i) => i === lastIdx ? { ...r, almostEmpty } : r),
-                          players: prev.players.map(p => ({
-                            ...p,
-                            weights: [...p.weights, parseInt(inputs[p.id])],
-                            deviations: [...p.deviations, Math.abs(parseInt(inputs[p.id]) - target)],
-                          })),
-                        };
-                      });
-                      setInputs({});
-                      setAlmostEmptyInputs({});
-                    }}
-                    className="w-full py-4 font-bungee"
-                  >AUSWERTEN</Button>
                 </Card>
               );
             }
@@ -1477,26 +1363,6 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                     onClick={() => setAlmostEmptyInput(v => !v)}
                     className={`w-full py-3 rounded-xl border-2 text-xs font-bold uppercase transition-colors ${almostEmptyInput ? 'bg-amber-500/20 border-amber-500 text-amber-400' : 'bg-slate-800 border-slate-700 text-slate-400'}`}
                   >{almostEmptyInput ? '✓ Fast leer – reicht nur noch für eine Runde' : 'Fast leer?'}</button>
-                  <Button
-                    onClick={() => {
-                      if (!myPlayerId || !currentRound) return;
-                      const val = parseInt(weightInput);
-                      if (isNaN(val) || val < 0 || val > maxForMe) { alert(`Ungültiger Wert. Max: ${maxForMe}g`); return; }
-                      updateGame(prev => {
-                        if (!prev) return null;
-                        const rounds = [...prev.rounds];
-                        const lastIdx = rounds.length - 1;
-                        // "Fast leer" im selben Schreibvorgang wie das Gewicht – kein extra Konflikt.
-                        const almostEmpty = { ...(rounds[lastIdx].almostEmpty ?? {}) };
-                        if (almostEmptyInput) almostEmpty[myPlayerId] = true; else delete almostEmpty[myPlayerId];
-                        rounds[lastIdx] = { ...rounds[lastIdx], finalWeights: { ...rounds[lastIdx].finalWeights, [myPlayerId]: val }, almostEmpty };
-                        return { ...prev, rounds };
-                      });
-                      setWeightInput('');
-                      setAlmostEmptyInput(false);
-                    }}
-                    className="w-full py-4 font-bungee"
-                  >EINWIEGEN</Button>
                   <p className="text-center text-slate-500 text-xs font-bold uppercase">
                     {submittedCount}/{game.players.length} eingereicht
                   </p>
@@ -1525,15 +1391,23 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                     const isWinner = idx === 0;
                     const isLoser = idx === roundResults.length - 1;
                     return (
-                      <div key={p.id} className={`p-4 rounded-xl border flex justify-between items-center ${isWinner ? 'bg-green-500/10 border-green-500/30' : 'bg-slate-900/40 border-slate-700'}`}>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold">{p.name}</span>
-                          {isWinner && <span className="text-[10px] font-bold uppercase text-green-500 bg-green-500/20 px-2 py-0.5 rounded">Rundensieger</span>}
-                          {isLoser && !isWinner && <span className="text-[10px] font-bold uppercase text-amber-500 bg-amber-500/20 px-2 py-0.5 rounded">Rundenverlierer</span>}
+                      <div key={p.id} className={`px-4 py-3 rounded-xl border flex flex-col gap-2 ${isWinner ? 'bg-green-500/10 border-green-500/30' : 'bg-slate-900/40 border-slate-700'} ${p.id === myPlayerId ? 'ring-1 ring-inset ring-amber-500/40' : ''}`}>
+                        <div className="flex justify-between items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap min-w-0">
+                            <span className="font-bold">{p.name}</span>
+                            {p.id === myPlayerId && <span className="text-[10px] font-bold uppercase text-amber-500">Du</span>}
+                            {isWinner && <span className="text-[10px] font-bold uppercase text-green-500 bg-green-500/20 px-2 py-0.5 rounded">Rundensieger</span>}
+                            {isLoser && !isWinner && <span className="text-[10px] font-bold uppercase text-amber-500 bg-amber-500/20 px-2 py-0.5 rounded">Rundenverlierer</span>}
+                          </div>
+                          <div className={`font-bungee text-xl shrink-0 ${diff === 0 ? 'text-green-400' : isAbove ? 'text-red-400' : 'text-blue-400'}`}>{isAbove ? '+' : ''}{diff}g</div>
                         </div>
-                        <div className="text-right">
-                          <div className={`font-bungee text-xl ${diff === 0 ? 'text-green-400' : isAbove ? 'text-red-400' : 'text-blue-400'}`}>{isAbove ? '+' : ''}{diff}g</div>
-                          <div className="text-[10px] text-slate-500 uppercase font-bold">{diff === 0 ? 'PUNKTGELANDET' : isAbove ? 'ZU WENIG GETRUNKEN' : 'ZU VIEL GETRUNKEN'}</div>
+                        {/* Zweite Zeile: Einordnung links, Reaktionen rechts – die Zeile wird so kaum höher. */}
+                        <div className="flex justify-between items-center gap-2 min-h-[24px]">
+                          <div className="text-[10px] text-slate-500 uppercase font-bold whitespace-nowrap">{diff === 0 ? 'PUNKTGELANDET' : isAbove ? 'ZU WENIG GETRUNKEN' : 'ZU VIEL GETRUNKEN'}</div>
+                          <div className="flex items-center">
+                            {floatingReactionsFor(p.id)}
+                            {p.id !== myPlayerId && <EmojiBar compact onReact={(emoji) => sendReaction(p.id, emoji)} />}
+                          </div>
                         </div>
                       </div>
                     );
@@ -1589,33 +1463,6 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                 </Card>
               )}
 
-              <PlacementCard
-                onSelect={isCreator ? askRemove : undefined}
-                selectableIds={game.players.filter(canRemove).map(p => p.id)}
-                players={(() => {
-                  const sorted = [...game.players].sort((a, b) => calculateAverageDeviation(a.deviations) - calculateAverageDeviation(b.deviations));
-                  const prevSorted = [...game.players].sort((a, b) => calculateAverageDeviation(a.deviations.slice(0, -1)) - calculateAverageDeviation(b.deviations.slice(0, -1)));
-                  const prevRank: Record<string, number> = Object.fromEntries(prevSorted.map((p, i) => [p.id, i]));
-                  return sorted.map((p, currIdx) => ({
-                    id: p.id,
-                    name: p.name,
-                    averageDeviation: calculateAverageDeviation(p.deviations),
-                    penalties: p.penalties,
-                    penaltiesGiven: getPenaltiesGiven(p.id, game.players, game.rounds),
-                    rankChange: p.deviations.length > 1 ? prevRank[p.id] - currIdx : undefined,
-                  }));
-                })()}
-              />
-
-              <Button
-                onClick={() => {
-                  // Finale nur nach einer angekündigten letzten Runde – nie überraschend.
-                  const isFinished = Boolean(currentRound?.isLastRound);
-                  updateGame(p => p ? { ...p, status: isFinished ? GameStatus.FINISHED : GameStatus.SETTING_TARGET, currentRoundIndex: p.currentRoundIndex + 1 } : null);
-                }}
-                disabled={!penaltyTargetId}
-                className="w-full py-4 font-bungee"
-              >{currentRound?.isLastRound ? 'ZUM FINALE' : 'NÄCHSTE RUNDE'}</Button>
             </div>
           );
         })()}
@@ -1625,7 +1472,7 @@ VITE_SUPABASE_ANON_KEY=...</pre>
           <Card className="text-center py-10">
             <div className="text-6xl mb-4">🏆</div>
             <h2 className="text-3xl font-bungee text-amber-500 mb-8 uppercase">Finale</h2>
-            <div className="space-y-2 mb-8">
+            <div className="space-y-2">
               {[...game.players].sort((a, b) => calculateAverageDeviation(a.deviations) - calculateAverageDeviation(b.deviations)).map((p, idx) => (
                 <div key={p.id} className={`p-4 rounded-xl border flex items-center justify-between ${p.id === myPlayerId ? 'border-amber-500/30 bg-amber-500/5' : 'border-slate-800 bg-slate-900/60'}`}>
                   <div className="font-bungee text-slate-600">#{idx + 1}</div>
@@ -1635,20 +1482,16 @@ VITE_SUPABASE_ANON_KEY=...</pre>
               ))}
             </div>
             {isCreator && (
-              <div className="space-y-3">
-                {/* Das Finale wird über Schwellwerte der Flaschengröße ausgelöst –
-                    bei anderen Gefäßen ist dann oft noch etwas drin. Der Host
-                    kann deshalb beliebig oft eine weitere Runde anhängen. */}
-                <Button
-                  onClick={() => updateGame(p => p ? { ...p, status: GameStatus.SETTING_TARGET } : null)}
-                  className="w-full py-4 font-bungee"
-                >NOCH EINE RUNDE</Button>
-                <Button variant="secondary" onClick={() => updateGame(() => null)} className="w-full py-4 font-bungee">MENÜ</Button>
-              </div>
+              <Button variant="secondary" onClick={() => updateGame(() => null)} className="w-full py-4 font-bungee mt-6">MENÜ</Button>
             )}
           </Card>
         )}
 
+    </>
+  );
+
+  const rankingListContent = (
+    <>
         {/* ─── Ranking (always visible except result/finished/setup) ─────────── */}
         {game.status !== GameStatus.ROUND_RESULT && game.status !== GameStatus.FINISHED && game.status !== GameStatus.SETUP && (
           <Card>
@@ -1683,13 +1526,7 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                   {p.id !== myPlayerId && (
                     <div className="mt-2 flex items-center justify-end gap-2">
                       {waiting && <div className="mr-auto">{pingButton(p)}</div>}
-                      <EmojiBar onReact={(emoji) => {
-                        const reaction: Reaction = { id: createId(), emoji, targetPlayerId: p.id, timestamp: Date.now() };
-                        // Sofort selbst anzeigen: Broadcast schickt dem Absender
-                        // seine eigene Nachricht nicht zurueck (self: false).
-                        setReactions(prev => [...recentReactions(prev), reaction]);
-                        if (channelRef.current) repo.sendReaction(channelRef.current, reaction);
-                      }} />
+                      <EmojiBar onReact={(emoji) => sendReaction(p.id, emoji)} />
                     </div>
                   )}
                 </div>
@@ -1699,11 +1536,337 @@ VITE_SUPABASE_ANON_KEY=...</pre>
           </Card>
         )}
 
+    </>
+  );
+
+  // Hauptaktion der Phase: sitzt fest im Dock unter den Seiten, damit sie von
+  // jeder Seite aus erreichbar ist. Braucht sie eine Eingabe von der
+  // Aufgaben-Seite, springt der erste Tipp von woanders erst dorthin.
+  type DockAction = { label: string; onClick: () => void; disabled?: boolean; variant?: 'primary' | 'secondary'; needsTaskPage?: boolean };
+  const bottleMax = getMaxWeight(game.bottleSize);
+
+  const submitInitialHost = () => {
+    if (!game.players.every(p => inputs[p.id] && parseInt(inputs[p.id]) >= 1 && parseInt(inputs[p.id]) <= bottleMax)) {
+      alert(`Bitte gültige Gewichte eingeben (1–${bottleMax}g)`);
+      return;
+    }
+    updateGame(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        status: GameStatus.SETTING_TARGET,
+        players: prev.players.map(p => ({ ...p, weights: [parseInt(inputs[p.id])] })),
+        pendingInitialWeights: {},
+      };
+    });
+    setInputs({});
+  };
+
+  const submitInitialPeer = () => {
+    if (!myPlayerId) return;
+    const val = parseInt(weightInput);
+    if (!val || val < 1 || val > bottleMax) { alert(`Bitte gültiges Gewicht eingeben (1–${bottleMax}g)`); return; }
+    updateGame(prev => prev ? { ...prev, pendingInitialWeights: { ...(prev.pendingInitialWeights ?? {}), [myPlayerId]: val } } : null);
+    setWeightInput('');
+  };
+
+  const startRound = () => {
+    // Ohne Antippen eines Presets stand hier NaN und der Knopf tat
+    // stillschweigend nichts – obwohl die Karte 30g anzeigt.
+    const parsed = parseInt(drinkAmountInput);
+    const amount = Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_DRINK_AMOUNT;
+    updateGame(prev => {
+      if (!prev) return null;
+      const currentMin = minLastWeight(prev.players);
+      if (currentMin === null) return prev;
+      return {
+        ...prev,
+        status: GameStatus.DRINKING,
+        rounds: [...prev.rounds, {
+          roundNumber: prev.rounds.length + 1,
+          targetWeight: currentMin - amount,
+          chooserPlayerId: myPlayerId ?? '',
+          initialWeights: {},
+          finalWeights: {},
+          isLastRound: getLastRoundReason(prev) !== null,
+        }],
+      };
+    });
+    setDrinkAmountInput('');
+  };
+
+  const submitFinalHost = () => {
+    const invalid = game.players.find(p => {
+      const val = parseInt(inputs[p.id]);
+      const maxForP = p.weights[0] || bottleMax;
+      return !inputs[p.id] || isNaN(val) || val < 0 || val > maxForP;
+    });
+    if (invalid) { alert(`Ungültiger Wert für ${invalid.name}`); return; }
+    updateGame(prev => {
+      if (!prev) return null;
+      const target = prev.rounds.slice(-1)[0].targetWeight;
+      const lastIdx = prev.rounds.length - 1;
+      const almostEmpty = Object.fromEntries(Object.entries(almostEmptyInputs).filter(([, v]) => v));
+      return {
+        ...prev,
+        status: GameStatus.ROUND_RESULT,
+        rounds: prev.rounds.map((r, i) => i === lastIdx ? { ...r, almostEmpty } : r),
+        players: prev.players.map(p => ({
+          ...p,
+          weights: [...p.weights, parseInt(inputs[p.id])],
+          deviations: [...p.deviations, Math.abs(parseInt(inputs[p.id]) - target)],
+        })),
+      };
+    });
+    setInputs({});
+    setAlmostEmptyInputs({});
+  };
+
+  const submitFinalPeer = () => {
+    if (!myPlayerId || !currentRound) return;
+    const maxForMe = myPlayer?.weights[0] ?? bottleMax;
+    const val = parseInt(weightInput);
+    if (isNaN(val) || val < 0 || val > maxForMe) { alert(`Ungültiger Wert. Max: ${maxForMe}g`); return; }
+    updateGame(prev => {
+      if (!prev) return null;
+      const rounds = [...prev.rounds];
+      const lastIdx = rounds.length - 1;
+      // "Fast leer" im selben Schreibvorgang wie das Gewicht – kein extra Konflikt.
+      const almostEmpty = { ...(rounds[lastIdx].almostEmpty ?? {}) };
+      if (almostEmptyInput) almostEmpty[myPlayerId] = true; else delete almostEmpty[myPlayerId];
+      rounds[lastIdx] = { ...rounds[lastIdx], finalWeights: { ...rounds[lastIdx].finalWeights, [myPlayerId]: val }, almostEmpty };
+      return { ...prev, rounds };
+    });
+    setWeightInput('');
+    setAlmostEmptyInput(false);
+  };
+
+  const nextRound = () => {
+    // Finale nur nach einer angekündigten letzten Runde – nie überraschend.
+    const isFinished = Boolean(currentRound?.isLastRound);
+    updateGame(p => p ? { ...p, status: isFinished ? GameStatus.FINISHED : GameStatus.SETTING_TARGET, currentRoundIndex: p.currentRoundIndex + 1 } : null);
+  };
+
+  const dockAction: DockAction | null = (() => {
+    switch (game.status) {
+      case GameStatus.SETUP:
+        return isCreator
+          ? { label: 'START', disabled: game.players.length < 1, onClick: () => updateGameFresh(p => p ? { ...p, status: GameStatus.WEIGHING_INITIAL } : null) }
+          : null;
+      case GameStatus.WEIGHING_INITIAL:
+        if (game.mode === 'host') return isCreator ? { label: 'FERTIG', needsTaskPage: true, onClick: submitInitialHost } : null;
+        if (!myPlayerId || (game.pendingInitialWeights ?? {})[myPlayerId] !== undefined) return null;
+        return { label: 'EINWIEGEN', needsTaskPage: true, onClick: submitInitialPeer };
+      case GameStatus.SETTING_TARGET:
+        if (chooserIsMe || (game.mode === 'host' && isCreator)) return { label: 'RUNDE STARTEN', needsTaskPage: true, onClick: startRound };
+        if (game.mode !== 'host' && minWeightPlayer && minWeightPlayer.id !== myPlayerId) {
+          const chooser = minWeightPlayer;
+          const cooling = pingCoolingDown(chooser.id);
+          return { label: cooling ? '✓ Angepingt' : `📣 ${chooser.name} anpingen`, variant: 'secondary', disabled: cooling, onClick: () => sendPing(chooser) };
+        }
+        return null;
+      case GameStatus.DRINKING:
+        if (game.mode === 'host' && !isCreator) return null;
+        return { label: 'WIEGEN', onClick: () => updateGame(p => p ? { ...p, status: GameStatus.WEIGHING_FINAL } : null) };
+      case GameStatus.WEIGHING_FINAL:
+        if (game.mode === 'host') return isCreator ? { label: 'AUSWERTEN', needsTaskPage: true, onClick: submitFinalHost } : null;
+        if (!myPlayerId || !currentRound || currentRound.finalWeights[myPlayerId] !== undefined) return null;
+        return { label: 'EINWIEGEN', needsTaskPage: true, onClick: submitFinalPeer };
+      case GameStatus.ROUND_RESULT:
+        return { label: currentRound?.isLastRound ? 'ZUM FINALE' : 'NÄCHSTE RUNDE', disabled: !penaltyTargetId, onClick: nextRound };
+      case GameStatus.FINISHED:
+        // Das Finale hängt an Schätzwerten – der Host kann beliebig oft eine Runde anhängen.
+        return isCreator ? { label: 'NOCH EINE RUNDE', onClick: () => updateGame(p => p ? { ...p, status: GameStatus.SETTING_TARGET } : null) } : null;
+      default:
+        return null;
+    }
+  })();
+
+  const placementContent = (
+    <PlacementCard
+      title="Gesamtwertung"
+      onSelect={isCreator ? askRemove : undefined}
+      selectableIds={game.players.filter(canRemove).map(p => p.id)}
+      players={(() => {
+        const sorted = [...game.players].sort((a, b) => calculateAverageDeviation(a.deviations) - calculateAverageDeviation(b.deviations));
+        const prevSorted = [...game.players].sort((a, b) => calculateAverageDeviation(a.deviations.slice(0, -1)) - calculateAverageDeviation(b.deviations.slice(0, -1)));
+        const prevRank: Record<string, number> = Object.fromEntries(prevSorted.map((p, i) => [p.id, i]));
+        return sorted.map((p, currIdx) => ({
+          id: p.id,
+          name: p.name,
+          averageDeviation: calculateAverageDeviation(p.deviations),
+          penalties: p.penalties,
+          penaltiesGiven: getPenaltiesGiven(p.id, game.players, game.rounds),
+          rankChange: p.deviations.length > 1 ? prevRank[p.id] - currIdx : undefined,
+        }));
+      })()}
+    />
+  );
+
+  // Rundenübersicht für die Details-Seite: Ziel, eigene Abweichung, Sieger.
+  const myRounds = myPlayer ? game.rounds.slice(0, myPlayer.deviations.length) : [];
+  const roundsTable = myPlayer && myRounds.length > 0 && (
+    <Card>
+      <h2 className="text-xs font-bold text-slate-500 uppercase mb-3">Runden im Detail</h2>
+      <table className="w-full text-sm tabular-nums">
+        <thead>
+          <tr className="text-[10px] font-bold text-slate-500 uppercase">
+            <th className="text-left pb-2">Runde</th>
+            <th className="text-right pb-2">Ziel</th>
+            <th className="text-right pb-2">Du</th>
+            <th className="text-right pb-2">Sieger</th>
+          </tr>
+        </thead>
+        <tbody>
+          {myRounds.map((r, i) => {
+            const withDev = game.players.filter(p => p.deviations[i] !== undefined);
+            const best = withDev.length ? Math.min(...withDev.map(p => p.deviations[i])) : null;
+            const winners = withDev.filter(p => p.deviations[i] === best).map(p => p.name).join(', ');
+            return (
+              <tr key={i} className="border-t border-slate-800">
+                <td className="py-2 font-bold text-slate-400">R{i + 1}</td>
+                <td className="py-2 text-right">{r.targetWeight} g</td>
+                <td className={`py-2 text-right font-bold ${myPlayer.deviations[i] === best ? 'text-amber-400' : 'text-white'}`}>{myPlayer.deviations[i]} g</td>
+                <td className="py-2 text-right text-slate-300">{winners}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </Card>
+  );
+
+  const taskLabel: Record<GameStatus, string> = {
+    [GameStatus.SETUP]: 'Lobby',
+    [GameStatus.WEIGHING_INITIAL]: 'Wiegen',
+    [GameStatus.SETTING_TARGET]: 'Ziel',
+    [GameStatus.DRINKING]: 'Trinken',
+    [GameStatus.WEIGHING_FINAL]: 'Wiegen',
+    [GameStatus.ROUND_RESULT]: 'Ergebnis',
+    [GameStatus.FINISHED]: 'Finale',
+  };
+  // Punkt am Aufgaben-Tab: du bist gefragt. Zahl am Ranking: auf so viele wird gewartet.
+  const iNeedToAct = !!myWaiting || (!!dockAction && dockAction.variant !== 'secondary' && !dockAction.disabled);
+  // In der Ergebnis-Phase wartet man auf die Strafe – die steht auf der Ergebnis-Seite, nicht in der Gesamtwertung.
+  const waitingCount = game.status === GameStatus.ROUND_RESULT ? 0
+    : game.players.filter(p => p.id !== myPlayerId && waitingOn(p)).length;
+
+  const taskPage: SwipePage = { key: 'task', label: taskLabel[game.status], badge: iNeedToAct ? <DotBadge /> : undefined, content: taskContent };
+  const mePage: SwipePage = { key: 'me', label: 'Details', content: <>{myCardContent}{roundsTable}</> };
+  const dashboardPages: SwipePage[] =
+    game.status === GameStatus.SETUP ? [taskPage]
+    : game.status === GameStatus.FINISHED ? [taskPage, mePage]
+    : [
+      taskPage,
+      {
+        key: 'ranking',
+        label: game.status === GameStatus.ROUND_RESULT ? 'Gesamt' : 'Ranking',
+        badge: waitingCount > 0 ? <CountBadge count={waitingCount} /> : undefined,
+        content: game.status === GameStatus.ROUND_RESULT ? placementContent : rankingListContent,
+      },
+      mePage,
+    ];
+  const currentPage = Math.min(activePage, dashboardPages.length - 1);
+
+  return (
+    <div className="h-[100dvh] flex flex-col">
+      <div className="flex-1 min-h-0 w-full max-w-2xl mx-auto flex flex-col">
+        <div className="flex-none px-4 pt-4 pb-3 space-y-3">
+
+        {syncError && (
+          <div className="bg-red-500/10 border border-red-500/30 rounded-2xl px-4 py-3 flex items-start gap-3">
+            <span className="text-lg leading-none">⚠️</span>
+            <div className="flex-1">
+              <p className="text-red-400 text-xs font-bold uppercase">Nicht gespeichert</p>
+              <p className="text-slate-400 text-[11px] mt-0.5">Dein Spielstand konnte nicht synchronisiert werden. Die anderen sehen deine Eingabe evtl. nicht.</p>
+            </div>
+            <button onClick={() => setSyncError(null)} className="text-slate-500 text-xs font-bold hover:text-slate-300">✕</button>
+          </div>
+        )}
+
+        {/* Header */}
+        <header className="flex justify-between items-end">
+          <div>
+            <p className="text-[10px] text-slate-500 font-bold uppercase">Spieler</p>
+            <h1 className="text-2xl font-bungee text-amber-500 flex items-center gap-2">
+              {myPlayer?.name ?? '...'}
+              <button
+                onClick={() => {
+                  const keys = Object.keys(DRINK_THEMES) as DrinkType[];
+                  setMyDrink(keys[(keys.indexOf(myDrink) + 1) % keys.length]);
+                }}
+                title={`Getränk: ${DRINK_THEMES[myDrink].label} (tippen zum Wechseln)`}
+                className="text-lg leading-none"
+              >{DRINK_THEMES[myDrink].emoji}</button>
+            </h1>
+          </div>
+          <div className="flex items-center gap-4 text-right">
+            <div className="text-xs font-bold text-slate-500 uppercase">Code: {game.gameCode}</div>
+            {isCreator && game.status !== GameStatus.SETUP && game.status !== GameStatus.FINISHED && (
+              <button onClick={goBack} className="text-slate-400 font-bold text-[10px] uppercase">← Zurück</button>
+            )}
+            {isCreator ? (
+              <button onClick={() => { if (window.confirm("Spiel wirklich beenden?")) updateGame(() => null); }} className="text-red-500 font-bold text-[10px] uppercase underline">Beenden</button>
+            ) : (
+              <button onClick={() => { setGame(null); setMyPlayerId(null); localStorage.removeItem('bierwiegen_last_session'); localStorage.removeItem('bierwiegen_player_id'); }} className="text-slate-500 font-bold text-[10px] uppercase">Verlassen</button>
+            )}
+          </div>
+        </header>
+
+        {/* Fester Werte-Streifen: bleibt über allen Tabs stehen. Details liegen auf der Ich-Seite. */}
+        {myPlayer && game.status !== GameStatus.SETUP && (() => {
+          const devs = myPlayer.deviations;
+          const trend = getDeviationTrend(devs);
+          const rank = [...game.players]
+            .sort((a, b) => calculateAverageDeviation(a.deviations) - calculateAverageDeviation(b.deviations))
+            .findIndex(p => p.id === myPlayer.id) + 1;
+          const fill = Math.round(getDrinkingProgress(myPlayer.weights.slice(-1)[0] || 0, myPlayer.weights[0] || 0, game.bottleSize) * 100);
+          return (
+            <div className="flex items-center gap-4 px-4 py-3 rounded-2xl bg-slate-800/50 border border-amber-500/30">
+              <div className="w-5 h-11 shrink-0 rounded-md border-2 border-slate-700 bg-slate-900 overflow-hidden flex flex-col justify-end" aria-label={`Flasche ${fill}% voll`}>
+                <div className="w-full bg-amber-500 transition-all duration-1000" style={{ height: `${fill}%` }} />
+              </div>
+              <div className="flex-1 grid grid-cols-4 gap-2">
+                <div className="min-w-0"><div className="text-[9px] font-bold text-slate-500 uppercase truncate">Gewicht</div><div className="font-bungee text-base text-white">{myPlayer.weights.slice(-1)[0] ?? '—'}{myPlayer.weights.length ? 'g' : ''}</div></div>
+                <div className="min-w-0"><div className="text-[9px] font-bold text-slate-500 uppercase truncate">Ø Abw.</div><div className="font-bungee text-base text-amber-500">{devs.length ? `${calculateAverageDeviation(devs)}g` : '—'}</div></div>
+                <div className="min-w-0"><div className="text-[9px] font-bold text-slate-500 uppercase truncate">Platz</div><div className="font-bungee text-base text-white">{devs.length ? `#${rank}` : '—'}</div></div>
+                <div className="min-w-0"><div className="text-[9px] font-bold text-slate-500 uppercase truncate">Trend</div><div className={`font-bungee text-base ${trend.color}`}>{trend.label}</div></div>
+              </div>
+            </div>
+          );
+        })()}
+
+        </div>
+
+        <SwipeTabs pages={dashboardPages} active={currentPage} onActiveChange={setActivePage} />
+
+        {/* Emojis, die an mich gehen, steigen aus der Aktionsleiste auf – auf jeder Seite. */}
+        <div className="relative flex-none">
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-0 z-20" aria-live="polite">
+            {recentReactions(reactions)
+              .filter(r => r.targetPlayerId === myPlayerId)
+              .map(r => <RisingReaction key={r.id} reaction={r} />)}
+          </div>
+        </div>
+
+        {dockAction && (
+          <div className="flex-none px-4 pt-3 pb-4 border-t border-slate-800 bg-slate-900">
+            <Button
+              variant={dockAction.variant ?? 'primary'}
+              disabled={dockAction.disabled}
+              onClick={() => {
+                if (dockAction.needsTaskPage && currentPage !== 0) { setActivePage(0); return; }
+                dockAction.onClick();
+              }}
+              className="w-full py-4 font-bungee"
+            >{dockAction.label}</Button>
+          </div>
+        )}
       </div>
 
       {/* ─── DEV PANEL ─────────────────────────────────────────────── */}
       {devMode && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 bg-slate-950/95 border-t border-amber-500/30 backdrop-blur-sm px-3 py-2 flex items-center gap-2 flex-wrap">
+        <div className="flex-none relative z-50 bg-slate-950/95 border-t border-amber-500/30 backdrop-blur-sm px-3 py-2 flex items-center gap-2 flex-wrap">
           <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest shrink-0">⚙ DEV</span>
           <div className="w-px h-4 bg-slate-700 shrink-0" />
           <div className="flex gap-1 flex-wrap flex-1">
