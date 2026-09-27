@@ -36,6 +36,7 @@ export interface Round {
 }
 
 export type BottleSize = '0.33' | '0.5' | '1.0';
+export type DrinkType = 'beer' | 'water' | 'cola';
 
 export interface Game {
   id: string;

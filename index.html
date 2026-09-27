@@ -6,6 +6,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Wiegen</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        // amber-400/-500 zeigen auf CSS-Variablen, damit das Farbschema des
+        // gewählten Getränks zur Laufzeit alle Akzentfarben umfärbt.
+        tailwind.config = {
+            theme: { extend: { colors: { amber: {
+                400: 'rgb(var(--ac-400) / <alpha-value>)',
+                500: 'rgb(var(--ac-500) / <alpha-value>)',
+            } } } }
+        };
+    </script>
     <link rel="preload" href="./fonts/inter-variable-latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="./fonts/bungee-latin.woff2" as="font" type="font/woff2" crossorigin>
     <style>
@@ -63,7 +73,7 @@
           10% { opacity: 1; }
           100% { transform: translateY(-80px) scale(1.5); opacity: 0; }
         }
-        :root { --ac: #f59e0b; --ac-h: #fbbf24; --ac-s: rgba(245,158,11,0.25); }
+        :root { --ac-500: 245 158 11; --ac-400: 251 191 36; --ac: rgb(var(--ac-500)); --ac-h: rgb(var(--ac-400)); --ac-s: rgb(var(--ac-500) / 0.25); }
         .ac-bg   { background-color: var(--ac) !important; }
         .ac-bg:hover { background-color: var(--ac-h) !important; }
         .ac-text { color: var(--ac) !important; }

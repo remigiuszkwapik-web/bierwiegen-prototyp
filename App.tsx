@@ -2,10 +2,10 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Lottie from 'lottie-react';
 import cheersAnimation from './src/assets/cheers.json';
-import { Game, GameStatus, Player, Round, Reaction, BottleSize } from './types';
+import { Game, GameStatus, Player, Round, Reaction, BottleSize, DrinkType } from './types';
 import { SupabaseGameRepository, isSupabaseConfigured } from './repositories/GameRepository';
 import { Card, Button, Input, BeerProgressBar, FloatingReaction, EmojiBar, PlacementCard } from './components/UI';
-import { BOTTLE_SIZES } from './constants';
+import { BOTTLE_SIZES, DRINK_THEMES, DRINK_STORAGE_KEY, applyDrinkTheme } from './constants';
 import {
   calculateAverageDeviation,
   getPlayerPerformanceTag,
@@ -76,10 +76,27 @@ const getUserId = () => {
     return id;
 };
 
+const DrinkPicker: React.FC<{ value: DrinkType; onChange: (d: DrinkType) => void; className?: string }> = ({ value, onChange, className = '' }) => (
+  <div className={`flex gap-2 ${className}`}>
+    {(Object.entries(DRINK_THEMES) as [DrinkType, typeof DRINK_THEMES[DrinkType]][]).map(([key, t]) => (
+      <button
+        key={key}
+        onClick={() => onChange(key)}
+        className={`flex-1 py-2.5 rounded-xl text-xs font-bold uppercase border-2 transition-colors ${value === key ? 'text-slate-900' : 'bg-slate-800 border-slate-700 text-slate-400'}`}
+        style={value === key ? { backgroundColor: `rgb(${t.c500})`, borderColor: `rgb(${t.c400})` } : undefined}
+      >{t.emoji} {t.label}</button>
+    ))}
+  </div>
+);
+
 const App: React.FC = () => {
   const myUserId = useMemo(() => getUserId(), []);
   const [game, setGame] = useState<Game | null>(null);
   const [myPlayerId, setMyPlayerId] = useState<string | null>(null);
+  const [myDrink, setMyDrink] = useState<DrinkType>(() => {
+    const saved = localStorage.getItem(DRINK_STORAGE_KEY) as DrinkType | null;
+    return saved && saved in DRINK_THEMES ? saved : 'beer';
+  });
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [devMode, setDevMode] = useState(IS_DEV_PARAM);
   const devModeRef = useRef(IS_DEV_PARAM);
@@ -135,6 +152,12 @@ const App: React.FC = () => {
     const code = params.get('code');
     if (code) setJoinCodeInput(code.toUpperCase());
   }, []);
+
+  // Farbschema: gilt nur auf diesem Gerät, wird lokal gemerkt
+  useEffect(() => {
+    applyDrinkTheme(myDrink);
+    localStorage.setItem(DRINK_STORAGE_KEY, myDrink);
+  }, [myDrink]);
 
   // Session-Persistenz: myPlayerId in localStorage speichern
   useEffect(() => {
@@ -432,7 +455,7 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                 left: b.left,
                 width: b.size,
                 height: b.size,
-                backgroundColor: '#f59e0b',
+                backgroundColor: 'var(--ac)',
                 opacity: poppedBubbles.has(i) ? 0 : 0.10,
                 animation: poppedBubbles.has(i) ? 'none' : `bubbleRise ${b.dur}s ease-in ${b.delay}s infinite`,
               }}
@@ -500,7 +523,7 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                     ? 'M0,175 C200,130 400,215 600,175 C800,135 1000,205 1200,175 C1300,155 1380,190 1440,175 L1440,280 L0,280 Z'
                     : 'M0,150 C150,190 350,115 500,155 C650,195 850,125 1050,158 C1200,185 1350,140 1440,158 L1440,280 L0,280 Z'
                   }
-                  fill="#f59e0b"
+                  fill="var(--ac)"
                 />
               </svg>
             </div>
@@ -586,6 +609,8 @@ VITE_SUPABASE_ANON_KEY=...</pre>
           {/* Player selection */}
           {game.players.length > 0 && (
             <>
+              <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Dein Getränk</p>
+              <DrinkPicker value={myDrink} onChange={setMyDrink} className="mb-5" />
               <p className="text-[10px] font-bold text-slate-500 uppercase mb-3">Wähle deinen Spieler</p>
               <div className="grid gap-2 mb-4">
                 {game.players.map(p => (
@@ -662,7 +687,17 @@ VITE_SUPABASE_ANON_KEY=...</pre>
         <header className="flex justify-between items-end">
           <div>
             <p className="text-[10px] text-slate-500 font-bold uppercase">Spieler</p>
-            <h1 className="text-2xl font-bungee text-amber-500">{myPlayer?.name ?? '...'}</h1>
+            <h1 className="text-2xl font-bungee text-amber-500 flex items-center gap-2">
+              {myPlayer?.name ?? '...'}
+              <button
+                onClick={() => {
+                  const keys = Object.keys(DRINK_THEMES) as DrinkType[];
+                  setMyDrink(keys[(keys.indexOf(myDrink) + 1) % keys.length]);
+                }}
+                title={`Getränk: ${DRINK_THEMES[myDrink].label} (tippen zum Wechseln)`}
+                className="text-lg leading-none"
+              >{DRINK_THEMES[myDrink].emoji}</button>
+            </h1>
           </div>
           <div className="flex items-center gap-4 text-right">
             <div className="text-xs font-bold text-slate-500 uppercase">Code: {game.gameCode}</div>
