@@ -95,7 +95,8 @@ const App: React.FC = () => {
   const [joinError, setJoinError] = useState<string | null>(null);
   // Nach der Namenswahl kommt ein eigener Schritt fürs Getränk.
   const [drinkStep, setDrinkStep] = useState(false);
-  const [showPlayerSheet, setShowPlayerSheet] = useState(false);
+  // Host hat in der Rangliste auf einen Spieler getippt → Dialog "entfernen?"
+  const [removeCandidate, setRemoveCandidate] = useState<Player | null>(null);
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [weightInput, setWeightInput] = useState<string>('');
   const [drinkAmountInput, setDrinkAmountInput] = useState<string>('');
@@ -816,6 +817,25 @@ VITE_SUPABASE_ANON_KEY=...</pre>
   const currentRound = game.rounds.slice(-1)[0];
   const penaltyTargetId = currentRound?.penaltyTargetId;
 
+  // Host darf jeden außer sich selbst aus dem laufenden Spiel nehmen.
+  const canRemove = (p: Player) => isCreator && p.id !== myPlayerId && game.status !== GameStatus.FINISHED;
+  const askRemove = (id: string) => {
+    const p = game.players.find(pl => pl.id === id);
+    if (p && canRemove(p)) setRemoveCandidate(p);
+  };
+
+  /** Für den Host: auf wen wartet das Spiel gerade? (nur "Jeder selbst") */
+  const waitingOn = (p: Player): string | null => {
+    if (!isCreator || game.mode === 'host') return null;
+    switch (game.status) {
+      case GameStatus.WEIGHING_INITIAL: return (game.pendingInitialWeights ?? {})[p.id] === undefined ? 'wiegt noch' : null;
+      case GameStatus.SETTING_TARGET: return minWeightPlayer?.id === p.id ? 'wählt das Ziel' : null;
+      case GameStatus.WEIGHING_FINAL: return currentRound && currentRound.finalWeights[p.id] === undefined ? 'wiegt noch' : null;
+      case GameStatus.ROUND_RESULT: return !penaltyTargetId && roundWinner?.id === p.id ? 'vergibt die Strafe' : null;
+      default: return null;
+    }
+  };
+
   return (
     <div className={`min-h-screen${devMode ? ' pb-20' : ''}`}>
       <div className="p-4 max-w-2xl mx-auto space-y-6">
@@ -851,9 +871,6 @@ VITE_SUPABASE_ANON_KEY=...</pre>
             <div className="text-xs font-bold text-slate-500 uppercase">Code: {game.gameCode}</div>
             {isCreator && game.status !== GameStatus.SETUP && game.status !== GameStatus.FINISHED && (
               <button onClick={goBack} className="text-slate-400 font-bold text-[10px] uppercase">← Zurück</button>
-            )}
-            {isCreator && game.status !== GameStatus.SETUP && game.status !== GameStatus.FINISHED && (
-              <button onClick={() => setShowPlayerSheet(true)} className="text-slate-400 font-bold text-[10px] uppercase">Spieler</button>
             )}
             {isCreator ? (
               <button onClick={() => { if (window.confirm("Spiel wirklich beenden?")) updateGame(() => null); }} className="text-red-500 font-bold text-[10px] uppercase underline">Beenden</button>
@@ -1426,6 +1443,8 @@ VITE_SUPABASE_ANON_KEY=...</pre>
               )}
 
               <PlacementCard
+                onSelect={isCreator ? askRemove : undefined}
+                selectableIds={game.players.filter(canRemove).map(p => p.id)}
                 players={(() => {
                   const sorted = [...game.players].sort((a, b) => calculateAverageDeviation(a.deviations) - calculateAverageDeviation(b.deviations));
                   const prevSorted = [...game.players].sort((a, b) => calculateAverageDeviation(a.deviations.slice(0, -1)) - calculateAverageDeviation(b.deviations.slice(0, -1)));
@@ -1481,14 +1500,17 @@ VITE_SUPABASE_ANON_KEY=...</pre>
         {/* ─── Ranking (always visible except result/finished/setup) ─────────── */}
         {game.status !== GameStatus.ROUND_RESULT && game.status !== GameStatus.FINISHED && game.status !== GameStatus.SETUP && (
           <Card>
-            <h2 className="text-xs font-bold text-slate-500 uppercase mb-4">Ranking</h2>
+            <h2 className={`text-xs font-bold text-slate-500 uppercase ${isCreator ? 'mb-1' : 'mb-4'}`}>Ranking</h2>
+            {isCreator && <p className="text-[10px] text-slate-600 mb-4">Spieler antippen, um ihn aus dem Spiel zu nehmen.</p>}
             <div className="space-y-2">
-              {[...game.players].sort((a, b) => calculateAverageDeviation(a.deviations) - calculateAverageDeviation(b.deviations)).map((p, idx) => (
-                <div key={p.id} className={`p-3 rounded-xl ${p.id === myPlayerId ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-slate-900/40'}`}>
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-2">
+              {[...game.players].sort((a, b) => calculateAverageDeviation(a.deviations) - calculateAverageDeviation(b.deviations)).map((p, idx) => {
+                const waiting = waitingOn(p);
+                const rowContent = (
+                  <>
+                    <div className="flex items-center gap-2 min-w-0">
                       <span className="font-bungee text-slate-600 text-[10px]">#{idx + 1}</span>
                       <span className="font-bold text-sm">{p.name}</span>
+                      {waiting && <span className="text-[10px] font-bold uppercase text-amber-500">⏳ {waiting}</span>}
                       <div className="relative">
                         {recentReactions(reactions)
                           .filter(r => r.targetPlayerId === p.id)
@@ -1496,7 +1518,15 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                       </div>
                     </div>
                     <div className="font-bungee text-xs">{calculateAverageDeviation(p.deviations)}g</div>
-                  </div>
+                  </>
+                );
+                return (
+                <div key={p.id} className={`p-3 rounded-xl ${p.id === myPlayerId ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-slate-900/40'}`}>
+                  {canRemove(p) ? (
+                    <button type="button" onClick={() => askRemove(p.id)} className="w-full flex justify-between items-center text-left">{rowContent}</button>
+                  ) : (
+                    <div className="flex justify-between items-center">{rowContent}</div>
+                  )}
                   {p.id !== myPlayerId && (
                     <div className="mt-2 flex justify-end">
                       <EmojiBar onReact={(emoji) => {
@@ -1509,7 +1539,8 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </Card>
         )}
@@ -1538,55 +1569,23 @@ VITE_SUPABASE_ANON_KEY=...</pre>
         </div>
       )}
 
-      {/* ─── Host: Spieler im laufenden Spiel verwalten ─────────────────── */}
-      {showPlayerSheet && isCreator && (() => {
-        const isPeer = game.mode !== 'host';
-        const waitingOn = (p: Player): string | null => {
-          if (!isPeer) return null;
-          switch (game.status) {
-            case GameStatus.WEIGHING_INITIAL: return (game.pendingInitialWeights ?? {})[p.id] === undefined ? 'wiegt noch' : null;
-            case GameStatus.SETTING_TARGET: return minWeightPlayer?.id === p.id ? 'wählt das Ziel' : null;
-            case GameStatus.WEIGHING_FINAL: return currentRound && currentRound.finalWeights[p.id] === undefined ? 'wiegt noch' : null;
-            case GameStatus.ROUND_RESULT: return !penaltyTargetId && roundWinner?.id === p.id ? 'vergibt die Strafe' : null;
-            default: return null;
-          }
-        };
-        return (
-          <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-4" onClick={() => setShowPlayerSheet(false)}>
-            <div className="max-w-md w-full" onClick={(e) => e.stopPropagation()}>
-              <Card>
-                <div className="flex justify-between items-center mb-1">
-                  <h2 className="text-lg font-bungee uppercase">Spieler</h2>
-                  <button onClick={() => setShowPlayerSheet(false)} className="text-slate-500 font-bold text-xs uppercase hover:text-slate-300">✕ Schließen</button>
-                </div>
-                <p className="text-slate-500 text-xs mb-4">Wer nicht mehr mitspielt, kann raus – dann wartet keiner mehr auf ihn.</p>
-                <div className="space-y-2">
-                  {game.players.map(p => {
-                    const waiting = waitingOn(p);
-                    const isMe = p.id === myPlayerId;
-                    return (
-                      <div key={p.id} className="flex items-center justify-between gap-3 p-3 bg-slate-900/40 rounded-xl">
-                        <div className="min-w-0">
-                          <div className="font-bold truncate">{p.name}{isMe && <span className="text-slate-500 font-normal"> (du)</span>}</div>
-                          {waiting && <div className="text-[10px] font-bold uppercase text-amber-500">⏳ {waiting}</div>}
-                        </div>
-                        {!isMe && (
-                          <button
-                            onClick={() => {
-                              if (window.confirm(`${p.name} aus dem Spiel entfernen? Die bisherigen Werte gehen dabei verloren.`)) removePlayer(p.id);
-                            }}
-                            className="shrink-0 px-3 py-2 rounded-lg border border-red-500/40 text-red-400 text-[10px] font-bold uppercase hover:bg-red-500/10"
-                          >Entfernen</button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </Card>
-            </div>
+      {/* ─── Host: Spieler aus dem laufenden Spiel nehmen ───────────────── */}
+      {removeCandidate && isCreator && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setRemoveCandidate(null)}>
+          <div className="max-w-sm w-full" role="dialog" aria-modal="true" aria-labelledby="remove-title" onClick={(e) => e.stopPropagation()}>
+            <Card>
+              <h2 id="remove-title" className="text-lg font-bungee uppercase mb-2">{removeCandidate.name} entfernen?</h2>
+              <p className="text-slate-400 text-sm mb-6">
+                {removeCandidate.name} wird aus dem Spiel genommen und niemand muss mehr auf {removeCandidate.name} warten. Die bisherigen Werte gehen dabei verloren.
+              </p>
+              <div className="flex gap-2">
+                <Button variant="secondary" onClick={() => setRemoveCandidate(null)} className="flex-1">Abbrechen</Button>
+                <Button variant="danger" onClick={() => { removePlayer(removeCandidate.id); setRemoveCandidate(null); }} className="flex-1">Entfernen</Button>
+              </div>
+            </Card>
           </div>
-        );
-      })()}
+        </div>
+      )}
 
       {showCheers && (
         <div className="fixed inset-0 z-50 pointer-events-none flex items-center justify-center">
