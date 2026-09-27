@@ -76,19 +76,6 @@ const getUserId = () => {
     return id;
 };
 
-const DrinkPicker: React.FC<{ value: DrinkType; onChange: (d: DrinkType) => void; className?: string }> = ({ value, onChange, className = '' }) => (
-  <div className={`flex gap-2 ${className}`}>
-    {(Object.entries(DRINK_THEMES) as [DrinkType, typeof DRINK_THEMES[DrinkType]][]).map(([key, t]) => (
-      <button
-        key={key}
-        onClick={() => onChange(key)}
-        className={`flex-1 py-2.5 rounded-xl text-xs font-bold uppercase border-2 transition-colors ${value === key ? 'text-slate-900' : 'bg-slate-800 border-slate-700 text-slate-400'}`}
-        style={value === key ? { backgroundColor: `rgb(${t.c500})`, borderColor: `rgb(${t.c400})` } : undefined}
-      >{t.emoji} {t.label}</button>
-    ))}
-  </div>
-);
-
 const App: React.FC = () => {
   const myUserId = useMemo(() => getUserId(), []);
   const [game, setGame] = useState<Game | null>(null);
@@ -106,6 +93,8 @@ const App: React.FC = () => {
   const [joinName, setJoinName] = useState('');
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
+  // Nach der Namenswahl kommt ein eigener Schritt fürs Getränk.
+  const [drinkStep, setDrinkStep] = useState(false);
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [weightInput, setWeightInput] = useState<string>('');
   const [drinkAmountInput, setDrinkAmountInput] = useState<string>('');
@@ -322,7 +311,7 @@ const App: React.FC = () => {
           : [...fresh.players, { id, name, weights: [], deviations: [], penalties: 0, userId: myUserId }];
         await updateGame(() => ({ ...fresh, players }));
 
-        if (devModeRef.current) { setMyPlayerId(id); setJoinName(''); return; }
+        if (devModeRef.current) { setMyPlayerId(id); setDrinkStep(true); setJoinName(''); return; }
 
         // Kurz warten, bis evtl. zeitgleiche Schreibvorgänge durch sind, dann prüfen.
         await new Promise(r => setTimeout(r, 600));
@@ -330,6 +319,7 @@ const App: React.FC = () => {
         if (check?.players.some(p => p.id === id && p.userId === myUserId)) {
           setGame(check);
           setMyPlayerId(id);
+          setDrinkStep(true);
           setJoinName('');
           return;
         }
@@ -626,6 +616,7 @@ VITE_SUPABASE_ANON_KEY=...</pre>
     const copyLink = () => { const url = new URL(window.location.href); url.searchParams.set('code', game.gameCode); navigator.clipboard.writeText(url.toString()); setCopyFeedback(true); setTimeout(() => setCopyFeedback(false), 2000); };
     const claimPlayer = (p: Player) => {
       setMyPlayerId(p.id);
+      setDrinkStep(true);
       if (!p.userId) {
         updateGameFresh(prev => prev ? { ...prev, players: prev.players.map(pl => pl.id === p.id ? { ...pl, userId: myUserId } : pl) } : null);
       }
@@ -672,7 +663,7 @@ VITE_SUPABASE_ANON_KEY=...</pre>
             </div>
           )}
 
-          {/* Selbst eintragen: Name + Getränk (für alle, solange das Spiel nicht läuft) */}
+          {/* Selbst eintragen (für alle, solange das Spiel nicht läuft) – Getränk kommt im nächsten Schritt */}
           {inSetup && (
             <div className="bg-slate-900/40 border border-slate-700 rounded-2xl p-4 mb-6">
               <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Dein Name</p>
@@ -684,8 +675,6 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                 className="w-full mb-4"
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); joinAsPlayer(); } }}
               />
-              <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Dein Getränk</p>
-              <DrinkPicker value={myDrink} onChange={setMyDrink} className="mb-4" />
               {joinError && <p className="text-red-400 text-xs font-bold mb-3">{joinError}</p>}
               <Button onClick={joinAsPlayer} disabled={!joinName.trim() || joining} className="w-full py-3 font-bungee">
                 {joining ? 'TRETE BEI…' : 'BEITRETEN'}
@@ -696,12 +685,6 @@ VITE_SUPABASE_ANON_KEY=...</pre>
           {/* Spieler in der Lobby / vorhandenen Spieler übernehmen */}
           {game.players.length > 0 && (
             <>
-              {!inSetup && (
-                <>
-                  <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Dein Getränk</p>
-                  <DrinkPicker value={myDrink} onChange={setMyDrink} className="mb-5" />
-                </>
-              )}
               <p className="text-[10px] font-bold text-slate-500 uppercase mb-3">
                 {inSetup ? `In der Lobby (${game.players.length}) · steht dein Name schon da? antippen` : 'Wähle deinen Spieler'}
               </p>
@@ -765,6 +748,36 @@ VITE_SUPABASE_ANON_KEY=...</pre>
           {!inSetup && game.players.length === 0 && (
             <p className="text-slate-500 text-sm text-center">Spiel läuft bereits. Bitte wähle einen Spieler.</p>
           )}
+        </Card>
+      </div>
+    );
+  }
+
+  // ─── Getränk wählen (nach der Namenswahl) ─────────────────────────────────
+  if (drinkStep && myPlayer) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4">
+        <Card className="max-w-md w-full">
+          <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Hallo {myPlayer.name}</p>
+          <h2 className="text-xl font-bungee mb-6 uppercase">Was trinkst du?</h2>
+          <div className="grid grid-cols-3 gap-3 mb-6">
+            {(Object.entries(DRINK_THEMES) as [DrinkType, typeof DRINK_THEMES[DrinkType]][]).map(([key, t]) => (
+              <button
+                key={key}
+                onClick={() => setMyDrink(key)}
+                className={`py-5 rounded-2xl border-2 flex flex-col items-center gap-2 transition-colors ${myDrink === key ? 'text-slate-900' : 'bg-slate-800 border-slate-700 text-slate-400'}`}
+                style={myDrink === key ? { backgroundColor: `rgb(${t.c500})`, borderColor: `rgb(${t.c400})` } : undefined}
+              >
+                <span className="text-4xl leading-none">{t.emoji}</span>
+                <span className="text-xs font-bold uppercase">{t.label}</span>
+              </button>
+            ))}
+          </div>
+          <Button onClick={() => setDrinkStep(false)} className="w-full py-4 font-bungee">WEITER</Button>
+          <button
+            onClick={() => { setDrinkStep(false); setMyPlayerId(null); }}
+            className="w-full mt-4 text-slate-500 font-bold text-[10px] uppercase hover:text-slate-300"
+          >← Anderer Name</button>
         </Card>
       </div>
     );
