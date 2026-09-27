@@ -101,7 +101,7 @@ export const RisingReaction: React.FC<{ reaction: { id: string; emoji: string } 
     <span
       role="img"
       aria-label={`Reaktion ${reaction.emoji}`}
-      className="reaction-rise absolute bottom-6 text-5xl drop-shadow-lg"
+      className="reaction-rise absolute bottom-6 text-3xl drop-shadow-lg"
       style={{ left: `${left}%`, ['--drift' as string]: `${drift}px` }}
     >{reaction.emoji}</span>
   );
