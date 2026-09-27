@@ -103,6 +103,9 @@ const App: React.FC = () => {
   useEffect(() => { devModeRef.current = devMode; }, [devMode]);
 
   const [newPlayerName, setNewPlayerName] = useState('');
+  const [joinName, setJoinName] = useState('');
+  const [joining, setJoining] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [weightInput, setWeightInput] = useState<string>('');
   const [drinkAmountInput, setDrinkAmountInput] = useState<string>('');
@@ -167,6 +170,17 @@ const App: React.FC = () => {
       localStorage.removeItem('bierwiegen_player_id');
     }
   }, [myPlayerId]);
+
+  // Eigener Spieler ist verschwunden (vom Host entfernt oder beim Beitritt
+  // überschrieben): zurück zum Eintragen, Name bleibt vorausgefüllt.
+  useEffect(() => {
+    if (!game || !myPlayerId) return;
+    if (game.players.some(p => p.id === myPlayerId)) return;
+    setMyPlayerId(null);
+    if (game.status === GameStatus.SETUP) {
+      setJoinError('Du bist nicht mehr in der Lobby – trag dich einfach nochmal ein.');
+    }
+  }, [game, myPlayerId]);
 
   // Session-Persistenz: beim Start automatisch wiederherstellen
   useEffect(() => {
@@ -246,14 +260,86 @@ const App: React.FC = () => {
     }
   }, []);
 
+  /**
+   * Wie updateGame, aber auf dem frisch geladenen DB-Stand. In der Lobby
+   * schreiben mehrere Geräte gleichzeitig (jeder trägt sich selbst ein) –
+   * mit dem lokalen, evtl. veralteten Stand würde man frisch beigetretene
+   * Spieler wieder überschreiben.
+   */
+  const updateGameFresh = useCallback(async (updater: (prev: Game | null) => Game | null) => {
+    const code = gameRef.current?.gameCode;
+    if (code && !devModeRef.current) {
+      try {
+        const fresh = await repo.loadGame(code);
+        if (fresh) gameRef.current = fresh;
+      } catch { /* offline: mit lokalem Stand weitermachen */ }
+    }
+    await updateGame(updater);
+  }, [updateGame]);
+
+  const isNameTaken = (players: Player[], name: string) =>
+    players.some(p => p.name.trim().toLowerCase() === name.trim().toLowerCase());
+
   const addPlayer = () => {
     const name = newPlayerName.trim();
     if (!name) return;
-    updateGame(p => p ? {
+    if (game && isNameTaken(game.players, name)) { alert('Den Namen gibt es schon.'); return; }
+    updateGameFresh(p => p ? {
       ...p,
-      players: [...p.players, { id: createId(), name, weights: [], deviations: [], penalties: 0 }],
+      players: isNameTaken(p.players, name) ? p.players
+        : [...p.players, { id: createId(), name, weights: [], deviations: [], penalties: 0 }],
     } : null);
     setNewPlayerName('');
+  };
+
+  /**
+   * Selbst in der Lobby eintragen: Spieler anlegen (oder einen freien Spieler
+   * gleichen Namens übernehmen) und direkt an dieses Gerät binden.
+   * Weil jedes Gerät die ganze Spielzeile schreibt, kann ein zeitgleicher
+   * Beitritt den eigenen überschreiben – darum danach nachprüfen und bei
+   * Bedarf erneut eintragen.
+   */
+  const joinAsPlayer = async () => {
+    const name = joinName.trim();
+    const code = gameRef.current?.gameCode;
+    if (!name || !code || joining) return;
+    setJoining(true);
+    setJoinError(null);
+    try {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const fresh = devModeRef.current ? gameRef.current : await repo.loadGame(code);
+        if (!fresh) { setJoinError('Den Raum gibt es nicht mehr.'); return; }
+        if (fresh.status !== GameStatus.SETUP) { setJoinError('Das Spiel läuft schon – wähle unten deinen Spieler.'); return; }
+
+        const existing = fresh.players.find(p => p.name.trim().toLowerCase() === name.toLowerCase());
+        if (existing?.userId && existing.userId !== myUserId) {
+          setJoinError('Der Name ist schon vergeben.');
+          return;
+        }
+        const id = existing?.id ?? createId();
+        const players = existing
+          ? fresh.players.map(p => p.id === id ? { ...p, userId: myUserId } : p)
+          : [...fresh.players, { id, name, weights: [], deviations: [], penalties: 0, userId: myUserId }];
+        await updateGame(() => ({ ...fresh, players }));
+
+        if (devModeRef.current) { setMyPlayerId(id); setJoinName(''); return; }
+
+        // Kurz warten, bis evtl. zeitgleiche Schreibvorgänge durch sind, dann prüfen.
+        await new Promise(r => setTimeout(r, 600));
+        const check = await repo.loadGame(code);
+        if (check?.players.some(p => p.id === id && p.userId === myUserId)) {
+          setGame(check);
+          setMyPlayerId(id);
+          setJoinName('');
+          return;
+        }
+      }
+      setJoinError('Beitreten hat nicht geklappt – bitte nochmal versuchen.');
+    } catch {
+      setJoinError('Keine Verbindung zur Datenbank. Bitte nochmal versuchen.');
+    } finally {
+      setJoining(false);
+    }
   };
 
   const createGame = () => {
@@ -533,34 +619,40 @@ VITE_SUPABASE_ANON_KEY=...</pre>
     );
   }
 
-  // ─── Player selection screen ──────────────────────────────────────────────
+  // ─── Lobby / Player selection screen ──────────────────────────────────────
   if (!myPlayerId) {
+    const inSetup = game.status === GameStatus.SETUP;
+    const leave = () => { setGame(null); setMyPlayerId(null); localStorage.removeItem('bierwiegen_last_session'); localStorage.removeItem('bierwiegen_player_id'); };
+    const copyLink = () => { const url = new URL(window.location.href); url.searchParams.set('code', game.gameCode); navigator.clipboard.writeText(url.toString()); setCopyFeedback(true); setTimeout(() => setCopyFeedback(false), 2000); };
+    const claimPlayer = (p: Player) => {
+      setMyPlayerId(p.id);
+      if (!p.userId) {
+        updateGameFresh(prev => prev ? { ...prev, players: prev.players.map(pl => pl.id === p.id ? { ...pl, userId: myUserId } : pl) } : null);
+      }
+    };
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4">
         <Card className="max-w-md w-full">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bungee">WER BIST DU?</h2>
+            <h2 className="text-xl font-bungee">{inSetup ? 'LOBBY' : 'WER BIST DU?'}</h2>
             <div className="flex items-center gap-3">
               <span className="text-xs font-bold text-slate-500 uppercase">Code: {game.gameCode}</span>
-              <button
-                onClick={() => { setGame(null); setMyPlayerId(null); localStorage.removeItem('bierwiegen_last_session'); localStorage.removeItem('bierwiegen_player_id'); }}
-                className="text-slate-600 font-bold text-[10px] uppercase hover:text-slate-400"
-              >✕ Verlassen</button>
+              <button onClick={leave} className="text-slate-600 font-bold text-[10px] uppercase hover:text-slate-400">✕ Verlassen</button>
             </div>
           </div>
 
-          {/* Creator: setup controls */}
-          {isCreator && game.status === GameStatus.SETUP && (
+          {/* Creator: Spieleinstellungen */}
+          {isCreator && inSetup && (
             <div className="space-y-4 mb-6">
               <div>
                 <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Modus</p>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => updateGame(p => p ? { ...p, mode: 'peer' } : null)}
+                    onClick={() => updateGameFresh(p => p ? { ...p, mode: 'peer' } : null)}
                     className={`flex-1 py-2.5 rounded-xl text-xs font-bold uppercase transition-colors ${game.mode !== 'host' ? 'bg-amber-500 text-slate-900' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}
                   >Jeder selbst</button>
                   <button
-                    onClick={() => updateGame(p => p ? { ...p, mode: 'host' } : null)}
+                    onClick={() => updateGameFresh(p => p ? { ...p, mode: 'host' } : null)}
                     className={`flex-1 py-2.5 rounded-xl text-xs font-bold uppercase transition-colors ${game.mode === 'host' ? 'bg-amber-500 text-slate-900' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}
                   >Host-Mode</button>
                 </div>
@@ -571,88 +663,106 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                   {(Object.entries(BOTTLE_SIZES) as [BottleSize, typeof BOTTLE_SIZES[keyof typeof BOTTLE_SIZES]][]).map(([key, val]) => (
                     <button
                       key={key}
-                      onClick={() => updateGame(p => p ? { ...p, bottleSize: key } : null)}
+                      onClick={() => updateGameFresh(p => p ? { ...p, bottleSize: key } : null)}
                       className={`flex-1 py-3 rounded-xl font-bungee border-2 transition-colors text-sm ${game.bottleSize === key ? 'bg-amber-500 border-amber-400 text-slate-900' : 'bg-slate-800 border-slate-700 text-white'}`}
                     >{val.label}</button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Spieler</p>
-                <div className="flex gap-2 mb-2">
-                  <Input
-                    value={newPlayerName}
-                    onChange={(e) => setNewPlayerName(e.target.value)}
-                    placeholder="Name..."
-                    className="flex-1"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        addPlayer();
-                      }
-                    }}
-                  />
-                  <Button onClick={addPlayer}>Add</Button>
-                </div>
-                <div className="space-y-1">
-                  {game.players.map(p => (
-                    <div key={p.id} className="flex justify-between p-3 bg-slate-900/40 rounded-xl">
-                      <span className="font-bold">{p.name}</span>
-                      <button onClick={() => updateGame(prev => prev ? { ...prev, players: prev.players.filter(pl => pl.id !== p.id) } : null)} className="text-red-500">✕</button>
-                    </div>
                   ))}
                 </div>
               </div>
             </div>
           )}
 
-          {/* Player selection */}
+          {/* Selbst eintragen: Name + Getränk (für alle, solange das Spiel nicht läuft) */}
+          {inSetup && (
+            <div className="bg-slate-900/40 border border-slate-700 rounded-2xl p-4 mb-6">
+              <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Dein Name</p>
+              <Input
+                value={joinName}
+                onChange={(e) => { setJoinName(e.target.value); setJoinError(null); }}
+                placeholder="Name..."
+                maxLength={20}
+                className="w-full mb-4"
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); joinAsPlayer(); } }}
+              />
+              <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Dein Getränk</p>
+              <DrinkPicker value={myDrink} onChange={setMyDrink} className="mb-4" />
+              {joinError && <p className="text-red-400 text-xs font-bold mb-3">{joinError}</p>}
+              <Button onClick={joinAsPlayer} disabled={!joinName.trim() || joining} className="w-full py-3 font-bungee">
+                {joining ? 'TRETE BEI…' : 'BEITRETEN'}
+              </Button>
+            </div>
+          )}
+
+          {/* Spieler in der Lobby / vorhandenen Spieler übernehmen */}
           {game.players.length > 0 && (
             <>
-              <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Dein Getränk</p>
-              <DrinkPicker value={myDrink} onChange={setMyDrink} className="mb-5" />
-              <p className="text-[10px] font-bold text-slate-500 uppercase mb-3">Wähle deinen Spieler</p>
+              {!inSetup && (
+                <>
+                  <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Dein Getränk</p>
+                  <DrinkPicker value={myDrink} onChange={setMyDrink} className="mb-5" />
+                </>
+              )}
+              <p className="text-[10px] font-bold text-slate-500 uppercase mb-3">
+                {inSetup ? `In der Lobby (${game.players.length}) · schon dabei? antippen` : 'Wähle deinen Spieler'}
+              </p>
               <div className="grid gap-2 mb-4">
                 {game.players.map(p => (
-                  <button
-                    key={p.id}
-                    onClick={() => {
-                      setMyPlayerId(p.id);
-                      if (!p.userId) {
-                        updateGame(prev => prev ? { ...prev, players: prev.players.map(pl => pl.id === p.id ? { ...pl, userId: myUserId } : pl) } : null);
-                      }
-                    }}
-                    className="p-4 bg-slate-900/60 rounded-xl border border-slate-700 font-bold text-left flex justify-between hover:border-amber-500/50 transition-colors"
-                  >
-                    {p.name}
-                    {p.userId && <span className="text-[10px] text-slate-500 font-bold uppercase">Online</span>}
-                    {!p.userId && <span className="text-amber-500">→</span>}
-                  </button>
+                  <div key={p.id} className="flex gap-2">
+                    <button
+                      onClick={() => claimPlayer(p)}
+                      className="flex-1 p-4 bg-slate-900/60 rounded-xl border border-slate-700 font-bold text-left flex justify-between hover:border-amber-500/50 transition-colors"
+                    >
+                      {p.name}
+                      {p.userId && <span className="text-[10px] text-slate-500 font-bold uppercase">{p.userId === myUserId ? 'Dieses Gerät' : 'Online'}</span>}
+                      {!p.userId && <span className="text-amber-500">→</span>}
+                    </button>
+                    {isCreator && inSetup && (
+                      <button
+                        onClick={() => updateGameFresh(prev => prev ? { ...prev, players: prev.players.filter(pl => pl.id !== p.id) } : null)}
+                        className="px-4 rounded-xl bg-slate-900/40 text-red-500"
+                        title="Spieler entfernen"
+                      >✕</button>
+                    )}
+                  </div>
                 ))}
               </div>
             </>
           )}
 
-          {/* Creator: share code + start */}
-          {isCreator && game.status === GameStatus.SETUP && (
+          {/* Creator: Spieler ohne eigenes Handy hinzufügen */}
+          {isCreator && inSetup && (
+            <div className="mb-6">
+              <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Spieler ohne Handy hinzufügen</p>
+              <div className="flex gap-2">
+                <Input
+                  value={newPlayerName}
+                  onChange={(e) => setNewPlayerName(e.target.value)}
+                  placeholder="Name..."
+                  maxLength={20}
+                  className="flex-1"
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addPlayer(); } }}
+                />
+                <Button variant="secondary" onClick={addPlayer}>Add</Button>
+              </div>
+            </div>
+          )}
+
+          {/* Creator: Link teilen + Start */}
+          {isCreator && inSetup && (
             <div className="space-y-3">
               <button
-                onClick={() => { const url = new URL(window.location.href); url.searchParams.set('code', game.gameCode); navigator.clipboard.writeText(url.toString()); setCopyFeedback(true); setTimeout(() => setCopyFeedback(false), 2000); }}
+                onClick={copyLink}
                 className={`w-full text-[10px] font-bold uppercase py-2 rounded-lg border transition-colors ${copyFeedback ? 'text-green-500 border-green-500/30' : 'text-slate-400 border-slate-700'}`}
-              >{copyFeedback ? '✓ Link kopiert' : 'Link kopieren'}</button>
+              >{copyFeedback ? '✓ Link kopiert' : 'Einladungslink kopieren'}</button>
               <Button
-                onClick={() => updateGame(p => p ? { ...p, status: GameStatus.WEIGHING_INITIAL } : null)}
+                onClick={() => updateGameFresh(p => p ? { ...p, status: GameStatus.WEIGHING_INITIAL } : null)}
                 disabled={game.players.length < 1}
                 className="w-full py-4 text-xl font-bungee"
               >START</Button>
             </div>
           )}
 
-          {!isCreator && game.players.length === 0 && (
-            <p className="text-slate-500 text-sm text-center">Warte darauf, dass der Ersteller Spieler hinzufügt...</p>
-          )}
-
-          {game.status !== GameStatus.SETUP && game.players.length === 0 && (
+          {!inSetup && game.players.length === 0 && (
             <p className="text-slate-500 text-sm text-center">Spiel läuft bereits. Bitte wähle einen Spieler.</p>
           )}
         </Card>
@@ -791,22 +901,36 @@ VITE_SUPABASE_ANON_KEY=...</pre>
             <h2 className="text-lg font-bungee mb-2 uppercase">
               {isCreator ? 'Bereit zum Start' : 'Warte auf den Ersteller'}
             </h2>
-            <p className="text-slate-400 text-xs font-bold uppercase mb-6">
+            <p className="text-slate-400 text-xs font-bold uppercase mb-4">
               {isCreator
                 ? `${game.players.length} Spieler im Raum`
                 : 'Das Spiel wird gleich gestartet...'}
             </p>
+            <div className="flex flex-wrap justify-center gap-2 mb-6">
+              {game.players.map(p => (
+                <span
+                  key={p.id}
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold ${p.id === myPlayerId ? 'bg-amber-500/15 text-amber-400 border border-amber-500/40' : 'bg-slate-900/60 text-slate-300 border border-slate-700'}`}
+                >{p.name}{!p.userId && <span className="text-slate-500 font-normal"> · ohne Handy</span>}</span>
+              ))}
+            </div>
             {isCreator && (
               <Button
-                onClick={() => updateGame(p => p ? { ...p, status: GameStatus.WEIGHING_INITIAL } : null)}
+                onClick={() => updateGameFresh(p => p ? { ...p, status: GameStatus.WEIGHING_INITIAL } : null)}
                 disabled={game.players.length < 1}
                 className="w-full py-4 text-xl font-bungee"
               >START</Button>
             )}
+            {isCreator && (
+              <button
+                onClick={() => { const url = new URL(window.location.href); url.searchParams.set('code', game.gameCode); navigator.clipboard.writeText(url.toString()); setCopyFeedback(true); setTimeout(() => setCopyFeedback(false), 2000); }}
+                className={`w-full mt-3 text-[10px] font-bold uppercase py-2 rounded-lg border transition-colors ${copyFeedback ? 'text-green-500 border-green-500/30' : 'text-slate-400 border-slate-700'}`}
+              >{copyFeedback ? '✓ Link kopiert' : 'Einladungslink kopieren'}</button>
+            )}
             <button
               onClick={() => setMyPlayerId(null)}
               className="mt-4 text-slate-500 font-bold text-[10px] uppercase hover:text-slate-300"
-            >← Zurück zur Spielerauswahl</button>
+            >← Zurück zur Lobby</button>
           </Card>
         )}
 

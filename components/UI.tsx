@@ -128,7 +128,8 @@ export const Input: React.FC<{
   placeholder?: string;
   className?: string;
   inputMode?: 'none' | 'text' | 'tel' | 'url' | 'email' | 'numeric' | 'decimal' | 'search';
-}> = ({ label, type = 'text', value, onChange, onKeyDown, placeholder, className = '', inputMode }) => (
+  maxLength?: number;
+}> = ({ label, type = 'text', value, onChange, onKeyDown, placeholder, className = '', inputMode, maxLength }) => (
   <div className={`flex flex-col gap-2 ${className}`}>
     {label && <label className="text-sm font-semibold text-slate-400 ml-1">{label}</label>}
     <input
@@ -138,6 +139,7 @@ export const Input: React.FC<{
       onChange={onChange}
       onKeyDown={onKeyDown}
       placeholder={placeholder}
+      maxLength={maxLength}
       className="bg-slate-900/50 border border-slate-700 rounded-2xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all text-white placeholder:text-slate-600"
     />
   </div>
