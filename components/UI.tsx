@@ -16,12 +16,25 @@ export interface PlacementEntry {
   rankChange?: number;
 }
 
-export const PlacementCard: React.FC<{ players: PlacementEntry[]; title?: string }> = ({ players, title = 'Aktuelle Platzierung' }) => (
+export const PlacementCard: React.FC<{
+  players: PlacementEntry[];
+  title?: string;
+  /** Optional: Zeilen antippbar machen (z. B. Host entfernt einen Spieler). */
+  onSelect?: (id: string) => void;
+  selectableIds?: string[];
+}> = ({ players, title = 'Aktuelle Platzierung', onSelect, selectableIds }) => (
   <Card>
     <h2 className="text-xs font-bold text-slate-500 uppercase mb-4">{title}</h2>
     <div className="space-y-2">
-      {players.map((p, idx) => (
-        <div key={p.id} className="p-3 rounded-xl border border-slate-700 bg-slate-900/40 flex items-center justify-between">
+      {players.map((p, idx) => {
+        const selectable = !!onSelect && (selectableIds?.includes(p.id) ?? true);
+        const Row = selectable ? 'button' : 'div';
+        return (
+        <Row
+          key={p.id}
+          {...(selectable ? { type: 'button' as const, onClick: () => onSelect!(p.id) } : {})}
+          className="w-full text-left p-3 rounded-xl border border-slate-700 bg-slate-900/40 flex items-center justify-between"
+        >
           <div className="flex items-center gap-3">
             <span className="font-bungee text-slate-500 text-sm w-6">#{idx + 1}</span>
             <span className="font-bold text-white">{p.name}</span>
@@ -38,8 +51,9 @@ export const PlacementCard: React.FC<{ players: PlacementEntry[]; title?: string
             <span className="text-[10px] font-bold text-slate-500 uppercase">K:{p.penalties} V:{p.penaltiesGiven}</span>
             <span className="font-bungee text-amber-500">{p.averageDeviation} g</span>
           </div>
-        </div>
-      ))}
+        </Row>
+        );
+      })}
     </div>
   </Card>
 );
@@ -128,7 +142,8 @@ export const Input: React.FC<{
   placeholder?: string;
   className?: string;
   inputMode?: 'none' | 'text' | 'tel' | 'url' | 'email' | 'numeric' | 'decimal' | 'search';
-}> = ({ label, type = 'text', value, onChange, onKeyDown, placeholder, className = '', inputMode }) => (
+  maxLength?: number;
+}> = ({ label, type = 'text', value, onChange, onKeyDown, placeholder, className = '', inputMode, maxLength }) => (
   <div className={`flex flex-col gap-2 ${className}`}>
     {label && <label className="text-sm font-semibold text-slate-400 ml-1">{label}</label>}
     <input
@@ -138,6 +153,7 @@ export const Input: React.FC<{
       onChange={onChange}
       onKeyDown={onKeyDown}
       placeholder={placeholder}
+      maxLength={maxLength}
       className="bg-slate-900/50 border border-slate-700 rounded-2xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all text-white placeholder:text-slate-600"
     />
   </div>

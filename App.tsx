@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Lottie from 'lottie-react';
 import cheersAnimation from './src/assets/cheers.json';
-import { Game, GameStatus, Player, Round, Reaction, BottleSize, DrinkType } from './types';
+import { Game, GameStatus, Player, Round, Reaction, Ping, BottleSize, DrinkType } from './types';
 import { SupabaseGameRepository, isSupabaseConfigured } from './repositories/GameRepository';
 import { Card, Button, Input, BeerProgressBar, FloatingReaction, EmojiBar, PlacementCard } from './components/UI';
 import { BOTTLE_SIZES, DRINK_THEMES, DRINK_STORAGE_KEY, applyDrinkTheme } from './constants';
@@ -28,6 +28,11 @@ const DEFAULT_DRINK_AMOUNT = 30;
 const REACTION_TTL_MS = 4000;
 const recentReactions = (reactions: Reaction[] | undefined) =>
   (reactions ?? []).filter(r => Date.now() - r.timestamp < REACTION_TTL_MS);
+
+/** Wie lange der gelbe Rahmen beim Angepingten bleibt – und wie lange man
+ *  denselben Spieler nicht erneut anpingen kann. */
+const PING_TTL_MS = 10000;
+const PING_COOLDOWN_MS = 5000;
 
 /** Letztes erfasstes Gewicht, oder null wenn der Spieler noch nicht gewogen hat. */
 const lastWeight = (p: Player): number | null => {
@@ -76,19 +81,6 @@ const getUserId = () => {
     return id;
 };
 
-const DrinkPicker: React.FC<{ value: DrinkType; onChange: (d: DrinkType) => void; className?: string }> = ({ value, onChange, className = '' }) => (
-  <div className={`flex gap-2 ${className}`}>
-    {(Object.entries(DRINK_THEMES) as [DrinkType, typeof DRINK_THEMES[DrinkType]][]).map(([key, t]) => (
-      <button
-        key={key}
-        onClick={() => onChange(key)}
-        className={`flex-1 py-2.5 rounded-xl text-xs font-bold uppercase border-2 transition-colors ${value === key ? 'text-slate-900' : 'bg-slate-800 border-slate-700 text-slate-400'}`}
-        style={value === key ? { backgroundColor: `rgb(${t.c500})`, borderColor: `rgb(${t.c400})` } : undefined}
-      >{t.emoji} {t.label}</button>
-    ))}
-  </div>
-);
-
 const App: React.FC = () => {
   const myUserId = useMemo(() => getUserId(), []);
   const [game, setGame] = useState<Game | null>(null);
@@ -103,6 +95,13 @@ const App: React.FC = () => {
   useEffect(() => { devModeRef.current = devMode; }, [devMode]);
 
   const [newPlayerName, setNewPlayerName] = useState('');
+  const [joinName, setJoinName] = useState('');
+  const [joining, setJoining] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
+  // Nach der Namenswahl kommt ein eigener Schritt fürs Getränk.
+  const [drinkStep, setDrinkStep] = useState(false);
+  // Host hat in der Rangliste auf einen Spieler getippt → Dialog "entfernen?"
+  const [removeCandidate, setRemoveCandidate] = useState<Player | null>(null);
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [weightInput, setWeightInput] = useState<string>('');
   const [drinkAmountInput, setDrinkAmountInput] = useState<string>('');
@@ -117,6 +116,8 @@ const App: React.FC = () => {
   // Broadcast an die anderen Geraete, nicht mehr ueber die Spielzeile.
   const [reactions, setReactions] = useState<Reaction[]>([]);
   const channelRef = useRef<ReturnType<typeof repo.subscribeToGame> | null>(null);
+  // Pings pro Spieler-ID: wann zuletzt angepingt und von wem. Lebt nur lokal.
+  const [pings, setPings] = useState<Record<string, { at: number; from: string }>>({});
 
   const gameRef = useRef<Game | null>(null);
   useEffect(() => { gameRef.current = game; }, [game]);
@@ -127,6 +128,21 @@ const App: React.FC = () => {
     repo.onError = (msg) => setSyncError(msg);
     return () => { repo.onError = null; };
   }, []);
+
+  // Abgelaufene Pings ausblenden (Rahmen weg, Anpingen wieder möglich).
+  const hasPings = Object.keys(pings).length > 0;
+  useEffect(() => {
+    if (!hasPings) return;
+    const t = setInterval(() => {
+      const now = Date.now();
+      setPings(prev => {
+        const alive = Object.entries(prev).filter(([, p]) => now - p.at < PING_TTL_MS);
+        return alive.length === Object.keys(prev).length ? prev : Object.fromEntries(alive);
+      });
+      setReactionTick(n => n + 1);
+    }, 1000);
+    return () => clearInterval(t);
+  }, [hasPings]);
 
   // Abgelaufene Reaktionen ausblenden, ohne auf den naechsten State-Wechsel zu warten.
   useEffect(() => {
@@ -167,6 +183,17 @@ const App: React.FC = () => {
       localStorage.removeItem('bierwiegen_player_id');
     }
   }, [myPlayerId]);
+
+  // Eigener Spieler ist verschwunden (vom Host entfernt oder beim Beitritt
+  // überschrieben): zurück zum Eintragen, Name bleibt vorausgefüllt.
+  useEffect(() => {
+    if (!game || !myPlayerId) return;
+    if (game.players.some(p => p.id === myPlayerId)) return;
+    setMyPlayerId(null);
+    setJoinError(game.status === GameStatus.SETUP
+      ? 'Du bist nicht mehr in der Lobby – trag dich einfach nochmal ein.'
+      : 'Der Host hat dich aus dem Spiel genommen.');
+  }, [game, myPlayerId]);
 
   // Session-Persistenz: beim Start automatisch wiederherstellen
   useEffect(() => {
@@ -221,6 +248,7 @@ const App: React.FC = () => {
         }
       },
       (reaction) => setReactions(prev => [...recentReactions(prev), reaction]),
+      (ping) => setPings(prev => ({ ...prev, [ping.targetPlayerId]: { at: Date.now(), from: ping.fromName } })),
     );
     channelRef.current = channel;
 
@@ -246,14 +274,87 @@ const App: React.FC = () => {
     }
   }, []);
 
+  /**
+   * Wie updateGame, aber auf dem frisch geladenen DB-Stand. In der Lobby
+   * schreiben mehrere Geräte gleichzeitig (jeder trägt sich selbst ein) –
+   * mit dem lokalen, evtl. veralteten Stand würde man frisch beigetretene
+   * Spieler wieder überschreiben.
+   */
+  const updateGameFresh = useCallback(async (updater: (prev: Game | null) => Game | null) => {
+    const code = gameRef.current?.gameCode;
+    if (code && !devModeRef.current) {
+      try {
+        const fresh = await repo.loadGame(code);
+        if (fresh) gameRef.current = fresh;
+      } catch { /* offline: mit lokalem Stand weitermachen */ }
+    }
+    await updateGame(updater);
+  }, [updateGame]);
+
+  const isNameTaken = (players: Player[], name: string) =>
+    players.some(p => p.name.trim().toLowerCase() === name.trim().toLowerCase());
+
   const addPlayer = () => {
     const name = newPlayerName.trim();
     if (!name) return;
-    updateGame(p => p ? {
+    if (game && isNameTaken(game.players, name)) { alert('Den Namen gibt es schon.'); return; }
+    updateGameFresh(p => p ? {
       ...p,
-      players: [...p.players, { id: createId(), name, weights: [], deviations: [], penalties: 0 }],
+      players: isNameTaken(p.players, name) ? p.players
+        : [...p.players, { id: createId(), name, weights: [], deviations: [], penalties: 0 }],
     } : null);
     setNewPlayerName('');
+  };
+
+  /**
+   * Selbst in der Lobby eintragen: Spieler anlegen (oder einen freien Spieler
+   * gleichen Namens übernehmen) und direkt an dieses Gerät binden.
+   * Weil jedes Gerät die ganze Spielzeile schreibt, kann ein zeitgleicher
+   * Beitritt den eigenen überschreiben – darum danach nachprüfen und bei
+   * Bedarf erneut eintragen.
+   */
+  const joinAsPlayer = async () => {
+    const name = joinName.trim();
+    const code = gameRef.current?.gameCode;
+    if (!name || !code || joining) return;
+    setJoining(true);
+    setJoinError(null);
+    try {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const fresh = devModeRef.current ? gameRef.current : await repo.loadGame(code);
+        if (!fresh) { setJoinError('Den Raum gibt es nicht mehr.'); return; }
+        if (fresh.status !== GameStatus.SETUP) { setJoinError('Das Spiel läuft schon – wähle unten deinen Spieler.'); return; }
+
+        const existing = fresh.players.find(p => p.name.trim().toLowerCase() === name.toLowerCase());
+        if (existing?.userId && existing.userId !== myUserId) {
+          setJoinError('Der Name ist schon vergeben.');
+          return;
+        }
+        const id = existing?.id ?? createId();
+        const players = existing
+          ? fresh.players.map(p => p.id === id ? { ...p, userId: myUserId } : p)
+          : [...fresh.players, { id, name, weights: [], deviations: [], penalties: 0, userId: myUserId }];
+        await updateGame(() => ({ ...fresh, players }));
+
+        if (devModeRef.current) { setMyPlayerId(id); setDrinkStep(true); setJoinName(''); return; }
+
+        // Kurz warten, bis evtl. zeitgleiche Schreibvorgänge durch sind, dann prüfen.
+        await new Promise(r => setTimeout(r, 600));
+        const check = await repo.loadGame(code);
+        if (check?.players.some(p => p.id === id && p.userId === myUserId)) {
+          setGame(check);
+          setMyPlayerId(id);
+          setDrinkStep(true);
+          setJoinName('');
+          return;
+        }
+      }
+      setJoinError('Beitreten hat nicht geklappt – bitte nochmal versuchen.');
+    } catch {
+      setJoinError('Keine Verbindung zur Datenbank. Bitte nochmal versuchen.');
+    } finally {
+      setJoining(false);
+    }
   };
 
   const createGame = () => {
@@ -273,6 +374,26 @@ const App: React.FC = () => {
     };
     updateGame(() => newGame);
   };
+
+  /**
+   * Host nimmt einen Spieler aus dem laufenden Spiel, damit die anderen nicht
+   * auf ihn warten müssen. Seine bisherigen Werte verschwinden mit ihm; wer
+   * wiegt, das Ziel wählt oder die Strafe vergibt, ergibt sich danach
+   * automatisch aus den verbliebenen Spielern.
+   */
+  const removePlayer = (playerId: string) => updateGameFresh(prev => {
+    if (!prev) return null;
+    const players = prev.players.filter(p => p.id !== playerId);
+    if (players.length === prev.players.length || players.length === 0) return prev;
+    const pendingInitialWeights = { ...(prev.pendingInitialWeights ?? {}) };
+    delete pendingInitialWeights[playerId];
+    // Hatte der Entfernte gerade die Strafe bekommen, wird sie neu vergeben.
+    const lastIdx = prev.rounds.length - 1;
+    const rounds = prev.status === GameStatus.ROUND_RESULT && prev.rounds[lastIdx]?.penaltyTargetId === playerId
+      ? prev.rounds.map((r, i) => i === lastIdx ? { ...r, penaltyTargetId: undefined } : r)
+      : prev.rounds;
+    return { ...prev, players, pendingInitialWeights, rounds };
+  });
 
   const loadDemoGame = useCallback(() => {
     devModeRef.current = true;
@@ -533,34 +654,41 @@ VITE_SUPABASE_ANON_KEY=...</pre>
     );
   }
 
-  // ─── Player selection screen ──────────────────────────────────────────────
+  // ─── Lobby / Player selection screen ──────────────────────────────────────
   if (!myPlayerId) {
+    const inSetup = game.status === GameStatus.SETUP;
+    const leave = () => { setGame(null); setMyPlayerId(null); localStorage.removeItem('bierwiegen_last_session'); localStorage.removeItem('bierwiegen_player_id'); };
+    const copyLink = () => { const url = new URL(window.location.href); url.searchParams.set('code', game.gameCode); navigator.clipboard.writeText(url.toString()); setCopyFeedback(true); setTimeout(() => setCopyFeedback(false), 2000); };
+    const claimPlayer = (p: Player) => {
+      setMyPlayerId(p.id);
+      setDrinkStep(true);
+      if (!p.userId) {
+        updateGameFresh(prev => prev ? { ...prev, players: prev.players.map(pl => pl.id === p.id ? { ...pl, userId: myUserId } : pl) } : null);
+      }
+    };
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4">
         <Card className="max-w-md w-full">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bungee">WER BIST DU?</h2>
+            <h2 className="text-xl font-bungee">{inSetup ? 'LOBBY' : 'WER BIST DU?'}</h2>
             <div className="flex items-center gap-3">
               <span className="text-xs font-bold text-slate-500 uppercase">Code: {game.gameCode}</span>
-              <button
-                onClick={() => { setGame(null); setMyPlayerId(null); localStorage.removeItem('bierwiegen_last_session'); localStorage.removeItem('bierwiegen_player_id'); }}
-                className="text-slate-600 font-bold text-[10px] uppercase hover:text-slate-400"
-              >✕ Verlassen</button>
+              <button onClick={leave} className="text-slate-600 font-bold text-[10px] uppercase hover:text-slate-400">✕ Verlassen</button>
             </div>
           </div>
 
-          {/* Creator: setup controls */}
-          {isCreator && game.status === GameStatus.SETUP && (
+          {/* Creator: Spieleinstellungen */}
+          {isCreator && inSetup && (
             <div className="space-y-4 mb-6">
               <div>
                 <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Modus</p>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => updateGame(p => p ? { ...p, mode: 'peer' } : null)}
+                    onClick={() => updateGameFresh(p => p ? { ...p, mode: 'peer' } : null)}
                     className={`flex-1 py-2.5 rounded-xl text-xs font-bold uppercase transition-colors ${game.mode !== 'host' ? 'bg-amber-500 text-slate-900' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}
                   >Jeder selbst</button>
                   <button
-                    onClick={() => updateGame(p => p ? { ...p, mode: 'host' } : null)}
+                    onClick={() => updateGameFresh(p => p ? { ...p, mode: 'host' } : null)}
                     className={`flex-1 py-2.5 rounded-xl text-xs font-bold uppercase transition-colors ${game.mode === 'host' ? 'bg-amber-500 text-slate-900' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}
                   >Host-Mode</button>
                 </div>
@@ -571,90 +699,134 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                   {(Object.entries(BOTTLE_SIZES) as [BottleSize, typeof BOTTLE_SIZES[keyof typeof BOTTLE_SIZES]][]).map(([key, val]) => (
                     <button
                       key={key}
-                      onClick={() => updateGame(p => p ? { ...p, bottleSize: key } : null)}
+                      onClick={() => updateGameFresh(p => p ? { ...p, bottleSize: key } : null)}
                       className={`flex-1 py-3 rounded-xl font-bungee border-2 transition-colors text-sm ${game.bottleSize === key ? 'bg-amber-500 border-amber-400 text-slate-900' : 'bg-slate-800 border-slate-700 text-white'}`}
                     >{val.label}</button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Spieler</p>
-                <div className="flex gap-2 mb-2">
-                  <Input
-                    value={newPlayerName}
-                    onChange={(e) => setNewPlayerName(e.target.value)}
-                    placeholder="Name..."
-                    className="flex-1"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        addPlayer();
-                      }
-                    }}
-                  />
-                  <Button onClick={addPlayer}>Add</Button>
-                </div>
-                <div className="space-y-1">
-                  {game.players.map(p => (
-                    <div key={p.id} className="flex justify-between p-3 bg-slate-900/40 rounded-xl">
-                      <span className="font-bold">{p.name}</span>
-                      <button onClick={() => updateGame(prev => prev ? { ...prev, players: prev.players.filter(pl => pl.id !== p.id) } : null)} className="text-red-500">✕</button>
-                    </div>
                   ))}
                 </div>
               </div>
             </div>
           )}
 
-          {/* Player selection */}
+          {/* Selbst eintragen (für alle, solange das Spiel nicht läuft) – Getränk kommt im nächsten Schritt */}
+          {inSetup && (
+            <div className="bg-slate-900/40 border border-slate-700 rounded-2xl p-4 mb-6">
+              <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Dein Name</p>
+              <Input
+                value={joinName}
+                onChange={(e) => { setJoinName(e.target.value); setJoinError(null); }}
+                placeholder="Name..."
+                maxLength={20}
+                className="w-full mb-4"
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); joinAsPlayer(); } }}
+              />
+              {joinError && <p className="text-red-400 text-xs font-bold mb-3">{joinError}</p>}
+              <Button onClick={joinAsPlayer} disabled={!joinName.trim() || joining} className="w-full py-3 font-bungee">
+                {joining ? 'TRETE BEI…' : 'BEITRETEN'}
+              </Button>
+            </div>
+          )}
+
+          {/* Spieler in der Lobby / vorhandenen Spieler übernehmen */}
           {game.players.length > 0 && (
             <>
-              <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Dein Getränk</p>
-              <DrinkPicker value={myDrink} onChange={setMyDrink} className="mb-5" />
-              <p className="text-[10px] font-bold text-slate-500 uppercase mb-3">Wähle deinen Spieler</p>
+              <p className="text-[10px] font-bold text-slate-500 uppercase mb-3">
+                {inSetup ? `In der Lobby (${game.players.length}) · steht dein Name schon da? antippen` : 'Wähle deinen Spieler'}
+              </p>
               <div className="grid gap-2 mb-4">
                 {game.players.map(p => (
-                  <button
-                    key={p.id}
-                    onClick={() => {
-                      setMyPlayerId(p.id);
-                      if (!p.userId) {
-                        updateGame(prev => prev ? { ...prev, players: prev.players.map(pl => pl.id === p.id ? { ...pl, userId: myUserId } : pl) } : null);
-                      }
-                    }}
-                    className="p-4 bg-slate-900/60 rounded-xl border border-slate-700 font-bold text-left flex justify-between hover:border-amber-500/50 transition-colors"
-                  >
-                    {p.name}
-                    {p.userId && <span className="text-[10px] text-slate-500 font-bold uppercase">Online</span>}
-                    {!p.userId && <span className="text-amber-500">→</span>}
-                  </button>
+                  <div key={p.id} className="flex gap-2">
+                    <button
+                      onClick={() => claimPlayer(p)}
+                      className="flex-1 p-4 bg-slate-900/60 rounded-xl border border-slate-700 font-bold text-left flex justify-between hover:border-amber-500/50 transition-colors"
+                    >
+                      {p.name}
+                      {p.userId && <span className="text-[10px] text-slate-500 font-bold uppercase">{p.userId === myUserId ? 'Du' : 'Online'}</span>}
+                      {!p.userId && <span className="text-amber-500">→</span>}
+                    </button>
+                    {isCreator && inSetup && (
+                      <button
+                        onClick={() => updateGameFresh(prev => prev ? { ...prev, players: prev.players.filter(pl => pl.id !== p.id) } : null)}
+                        className="px-4 rounded-xl bg-slate-900/40 text-red-500"
+                        title="Spieler entfernen"
+                      >✕</button>
+                    )}
+                  </div>
                 ))}
               </div>
             </>
           )}
 
-          {/* Creator: share code + start */}
-          {isCreator && game.status === GameStatus.SETUP && (
+          {/* Creator: Mitspieler schnell selbst eintragen – die suchen sich dann oben aus */}
+          {isCreator && inSetup && (
+            <div className="mb-6">
+              <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Mitspieler eintragen</p>
+              <div className="flex gap-2">
+                <Input
+                  value={newPlayerName}
+                  onChange={(e) => setNewPlayerName(e.target.value)}
+                  placeholder="Name..."
+                  maxLength={20}
+                  className="flex-1"
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addPlayer(); } }}
+                />
+                <Button variant="secondary" onClick={addPlayer}>Add</Button>
+              </div>
+            </div>
+          )}
+
+          {/* Creator: Link teilen + Start */}
+          {isCreator && inSetup && (
             <div className="space-y-3">
               <button
-                onClick={() => { const url = new URL(window.location.href); url.searchParams.set('code', game.gameCode); navigator.clipboard.writeText(url.toString()); setCopyFeedback(true); setTimeout(() => setCopyFeedback(false), 2000); }}
+                onClick={copyLink}
                 className={`w-full text-[10px] font-bold uppercase py-2 rounded-lg border transition-colors ${copyFeedback ? 'text-green-500 border-green-500/30' : 'text-slate-400 border-slate-700'}`}
-              >{copyFeedback ? '✓ Link kopiert' : 'Link kopieren'}</button>
+              >{copyFeedback ? '✓ Link kopiert' : 'Einladungslink kopieren'}</button>
               <Button
-                onClick={() => updateGame(p => p ? { ...p, status: GameStatus.WEIGHING_INITIAL } : null)}
+                onClick={() => updateGameFresh(p => p ? { ...p, status: GameStatus.WEIGHING_INITIAL } : null)}
                 disabled={game.players.length < 1}
                 className="w-full py-4 text-xl font-bungee"
               >START</Button>
             </div>
           )}
 
-          {!isCreator && game.players.length === 0 && (
-            <p className="text-slate-500 text-sm text-center">Warte darauf, dass der Ersteller Spieler hinzufügt...</p>
+          {!inSetup && joinError && (
+            <p className="text-red-400 text-xs font-bold mb-3 text-center">{joinError}</p>
           )}
 
-          {game.status !== GameStatus.SETUP && game.players.length === 0 && (
+          {!inSetup && game.players.length === 0 && (
             <p className="text-slate-500 text-sm text-center">Spiel läuft bereits. Bitte wähle einen Spieler.</p>
           )}
+        </Card>
+      </div>
+    );
+  }
+
+  // ─── Getränk wählen (nach der Namenswahl) ─────────────────────────────────
+  if (drinkStep && myPlayer) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4">
+        <Card className="max-w-md w-full">
+          <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Hallo {myPlayer.name}</p>
+          <h2 className="text-xl font-bungee mb-6 uppercase">Was trinkst du?</h2>
+          <div className="grid grid-cols-3 gap-3 mb-6">
+            {(Object.entries(DRINK_THEMES) as [DrinkType, typeof DRINK_THEMES[DrinkType]][]).map(([key, t]) => (
+              <button
+                key={key}
+                onClick={() => setMyDrink(key)}
+                className={`py-5 rounded-2xl border-2 flex flex-col items-center gap-2 transition-colors ${myDrink === key ? 'text-slate-900' : 'bg-slate-800 border-slate-700 text-slate-400'}`}
+                style={myDrink === key ? { backgroundColor: `rgb(${t.c500})`, borderColor: `rgb(${t.c400})` } : undefined}
+              >
+                <span className="text-4xl leading-none">{t.emoji}</span>
+                <span className="text-xs font-bold uppercase">{t.label}</span>
+              </button>
+            ))}
+          </div>
+          <Button onClick={() => setDrinkStep(false)} className="w-full py-4 font-bungee">WEITER</Button>
+          <button
+            onClick={() => { setDrinkStep(false); setMyPlayerId(null); }}
+            className="w-full mt-4 text-slate-500 font-bold text-[10px] uppercase hover:text-slate-300"
+          >← Anderer Name</button>
         </Card>
       </div>
     );
@@ -667,6 +839,50 @@ VITE_SUPABASE_ANON_KEY=...</pre>
   const iAmRoundWinner = roundWinner?.id === myPlayerId;
   const currentRound = game.rounds.slice(-1)[0];
   const penaltyTargetId = currentRound?.penaltyTargetId;
+
+  // Host darf jeden außer sich selbst aus dem laufenden Spiel nehmen.
+  const canRemove = (p: Player) => isCreator && p.id !== myPlayerId && game.status !== GameStatus.FINISHED;
+  const askRemove = (id: string) => {
+    const p = game.players.find(pl => pl.id === id);
+    if (p && canRemove(p)) setRemoveCandidate(p);
+  };
+
+  /** Auf wen wartet das Spiel gerade? (nur "Jeder selbst" – im Host-Mode tippt der Host alles ein) */
+  const waitingOn = (p: Player): string | null => {
+    if (game.mode === 'host') return null;
+    switch (game.status) {
+      case GameStatus.WEIGHING_INITIAL: return (game.pendingInitialWeights ?? {})[p.id] === undefined ? 'fehlt noch' : null;
+      case GameStatus.SETTING_TARGET: return minWeightPlayer?.id === p.id ? 'wählt das Ziel' : null;
+      case GameStatus.WEIGHING_FINAL: return currentRound && currentRound.finalWeights[p.id] === undefined ? 'fehlt noch' : null;
+      case GameStatus.ROUND_RESULT: return !penaltyTargetId && roundWinner?.id === p.id ? 'vergibt die Strafe' : null;
+      default: return null;
+    }
+  };
+  const isWeighing = game.mode !== 'host' && (game.status === GameStatus.WEIGHING_INITIAL || game.status === GameStatus.WEIGHING_FINAL);
+
+  const pingCoolingDown = (id: string) => !!pings[id] && Date.now() - pings[id].at < PING_COOLDOWN_MS;
+  const sendPing = (p: Player) => {
+    if (pingCoolingDown(p.id)) return;
+    const ping: Ping = { targetPlayerId: p.id, fromName: myPlayer?.name ?? '', timestamp: Date.now() };
+    setPings(prev => ({ ...prev, [p.id]: { at: Date.now(), from: ping.fromName } }));
+    if (channelRef.current) repo.sendPing(channelRef.current, ping);
+  };
+  const pingButton = (player: Player) => (
+    <button
+      type="button"
+      onClick={() => sendPing(player)}
+      disabled={pingCoolingDown(player.id)}
+      className="shrink-0 whitespace-nowrap px-3 py-2 rounded-full border-2 border-yellow-400 text-yellow-300 text-[10px] font-bold uppercase disabled:border-slate-700 disabled:text-slate-500 transition-colors"
+    >{pingCoolingDown(player.id) ? '✓ Angepingt' : '📣 Anpingen'}</button>
+  );
+
+  // Ich wurde angepingt und bin noch dran → dicker gelber Rahmen.
+  const myPing = myPlayerId ? pings[myPlayerId] : undefined;
+  const myWaiting = myPlayer ? waitingOn(myPlayer) : null;
+  const showMyPing = !!myPing && !!myWaiting && Date.now() - myPing.at < PING_TTL_MS;
+  const myPingText = myWaiting === 'wählt das Ziel' ? 'Du bist dran – wähl das Ziel!'
+    : myWaiting === 'vergibt die Strafe' ? 'Du bist dran – vergib die Strafe!'
+    : 'Trag dein Gewicht ein!';
 
   return (
     <div className={`min-h-screen${devMode ? ' pb-20' : ''}`}>
@@ -791,22 +1007,36 @@ VITE_SUPABASE_ANON_KEY=...</pre>
             <h2 className="text-lg font-bungee mb-2 uppercase">
               {isCreator ? 'Bereit zum Start' : 'Warte auf den Ersteller'}
             </h2>
-            <p className="text-slate-400 text-xs font-bold uppercase mb-6">
+            <p className="text-slate-400 text-xs font-bold uppercase mb-4">
               {isCreator
                 ? `${game.players.length} Spieler im Raum`
                 : 'Das Spiel wird gleich gestartet...'}
             </p>
+            <div className="flex flex-wrap justify-center gap-2 mb-6">
+              {game.players.map(p => (
+                <span
+                  key={p.id}
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold ${p.id === myPlayerId ? 'bg-amber-500/15 text-amber-400 border border-amber-500/40' : 'bg-slate-900/60 text-slate-300 border border-slate-700'}`}
+                >{p.name}{!p.userId && <span className="text-slate-500 font-normal"> · noch frei</span>}</span>
+              ))}
+            </div>
             {isCreator && (
               <Button
-                onClick={() => updateGame(p => p ? { ...p, status: GameStatus.WEIGHING_INITIAL } : null)}
+                onClick={() => updateGameFresh(p => p ? { ...p, status: GameStatus.WEIGHING_INITIAL } : null)}
                 disabled={game.players.length < 1}
                 className="w-full py-4 text-xl font-bungee"
               >START</Button>
             )}
+            {isCreator && (
+              <button
+                onClick={() => { const url = new URL(window.location.href); url.searchParams.set('code', game.gameCode); navigator.clipboard.writeText(url.toString()); setCopyFeedback(true); setTimeout(() => setCopyFeedback(false), 2000); }}
+                className={`w-full mt-3 text-[10px] font-bold uppercase py-2 rounded-lg border transition-colors ${copyFeedback ? 'text-green-500 border-green-500/30' : 'text-slate-400 border-slate-700'}`}
+              >{copyFeedback ? '✓ Link kopiert' : 'Einladungslink kopieren'}</button>
+            )}
             <button
               onClick={() => setMyPlayerId(null)}
               className="mt-4 text-slate-500 font-bold text-[10px] uppercase hover:text-slate-300"
-            >← Zurück zur Spielerauswahl</button>
+            >← Zurück zur Lobby</button>
           </Card>
         )}
 
@@ -1247,6 +1477,9 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                     <p className="text-slate-400 text-xs font-bold uppercase">
                       {game.mode === 'host' ? 'Host vergibt gerade die Strafe...' : `${roundWinner?.name} vergibt gerade die Strafe...`}
                     </p>
+                    {game.mode !== 'host' && roundWinner && roundWinner.id !== myPlayerId && (
+                      <div className="mt-3 flex justify-center">{pingButton(roundWinner)}</div>
+                    )}
                   </Card>
                 )
               ) : (
@@ -1261,6 +1494,8 @@ VITE_SUPABASE_ANON_KEY=...</pre>
               )}
 
               <PlacementCard
+                onSelect={isCreator ? askRemove : undefined}
+                selectableIds={game.players.filter(canRemove).map(p => p.id)}
                 players={(() => {
                   const sorted = [...game.players].sort((a, b) => calculateAverageDeviation(a.deviations) - calculateAverageDeviation(b.deviations));
                   const prevSorted = [...game.players].sort((a, b) => calculateAverageDeviation(a.deviations.slice(0, -1)) - calculateAverageDeviation(b.deviations.slice(0, -1)));
@@ -1316,14 +1551,18 @@ VITE_SUPABASE_ANON_KEY=...</pre>
         {/* ─── Ranking (always visible except result/finished/setup) ─────────── */}
         {game.status !== GameStatus.ROUND_RESULT && game.status !== GameStatus.FINISHED && game.status !== GameStatus.SETUP && (
           <Card>
-            <h2 className="text-xs font-bold text-slate-500 uppercase mb-4">Ranking</h2>
+            <h2 className={`text-xs font-bold text-slate-500 uppercase ${isCreator ? 'mb-1' : 'mb-4'}`}>Ranking</h2>
+            {isCreator && <p className="text-[10px] text-slate-600 mb-4">Spieler antippen, um ihn aus dem Spiel zu nehmen.</p>}
             <div className="space-y-2">
-              {[...game.players].sort((a, b) => calculateAverageDeviation(a.deviations) - calculateAverageDeviation(b.deviations)).map((p, idx) => (
-                <div key={p.id} className={`p-3 rounded-xl ${p.id === myPlayerId ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-slate-900/40'}`}>
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-2">
+              {[...game.players].sort((a, b) => calculateAverageDeviation(a.deviations) - calculateAverageDeviation(b.deviations)).map((p, idx) => {
+                const waiting = waitingOn(p);
+                const rowContent = (
+                  <>
+                    <div className="flex items-center gap-2 min-w-0">
                       <span className="font-bungee text-slate-600 text-[10px]">#{idx + 1}</span>
                       <span className="font-bold text-sm">{p.name}</span>
+                      {waiting && <span className="text-[10px] font-bold uppercase text-yellow-300">⏳ {waiting}</span>}
+                      {!waiting && isWeighing && <span className="text-[10px] font-bold uppercase text-green-400">✓ eingetragen</span>}
                       <div className="relative">
                         {recentReactions(reactions)
                           .filter(r => r.targetPlayerId === p.id)
@@ -1331,9 +1570,18 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                       </div>
                     </div>
                     <div className="font-bungee text-xs">{calculateAverageDeviation(p.deviations)}g</div>
-                  </div>
+                  </>
+                );
+                return (
+                <div key={p.id} className={`p-3 rounded-xl ${p.id === myPlayerId ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-slate-900/40'}`}>
+                  {canRemove(p) ? (
+                    <button type="button" onClick={() => askRemove(p.id)} className="w-full flex justify-between items-center text-left">{rowContent}</button>
+                  ) : (
+                    <div className="flex justify-between items-center">{rowContent}</div>
+                  )}
                   {p.id !== myPlayerId && (
-                    <div className="mt-2 flex justify-end">
+                    <div className="mt-2 flex items-center justify-end gap-2">
+                      {waiting && <div className="mr-auto">{pingButton(p)}</div>}
                       <EmojiBar onReact={(emoji) => {
                         const reaction: Reaction = { id: createId(), emoji, targetPlayerId: p.id, timestamp: Date.now() };
                         // Sofort selbst anzeigen: Broadcast schickt dem Absender
@@ -1344,7 +1592,8 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </Card>
         )}
@@ -1370,6 +1619,39 @@ VITE_SUPABASE_ANON_KEY=...</pre>
             title="Demo zurücksetzen"
             className="text-[10px] font-bold text-slate-600 hover:text-slate-400 uppercase px-1 ml-auto shrink-0"
           >↺ RESET</button>
+        </div>
+      )}
+
+      {/* ─── Angepingt: dicker gelber Rahmen + Hinweis ─────────────────── */}
+      {showMyPing && (
+        <>
+          <div className="fixed inset-0 z-[60] pointer-events-none border-[14px] border-yellow-400 animate-pulse" />
+          <button
+            type="button"
+            onClick={() => setPings(prev => { const n = { ...prev }; delete n[myPlayerId!]; return n; })}
+            className="fixed top-6 left-1/2 -translate-x-1/2 z-[61] w-[calc(100%-4rem)] max-w-sm bg-yellow-400 text-slate-900 rounded-2xl px-5 py-4 shadow-2xl text-center"
+          >
+            <div className="font-bungee text-xl leading-tight">Hey {myPlayer?.name}!</div>
+            <div className="text-sm font-bold">{myPingText}</div>
+          </button>
+        </>
+      )}
+
+      {/* ─── Host: Spieler aus dem laufenden Spiel nehmen ───────────────── */}
+      {removeCandidate && isCreator && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setRemoveCandidate(null)}>
+          <div className="max-w-sm w-full" role="dialog" aria-modal="true" aria-labelledby="remove-title" onClick={(e) => e.stopPropagation()}>
+            <Card>
+              <h2 id="remove-title" className="text-lg font-bungee uppercase mb-2">{removeCandidate.name} entfernen?</h2>
+              <p className="text-slate-400 text-sm mb-6">
+                {removeCandidate.name} wird aus dem Spiel genommen und niemand muss mehr auf {removeCandidate.name} warten. Die bisherigen Werte gehen dabei verloren.
+              </p>
+              <div className="flex gap-2">
+                <Button variant="secondary" onClick={() => setRemoveCandidate(null)} className="flex-1">Abbrechen</Button>
+                <Button variant="danger" onClick={() => { removePlayer(removeCandidate.id); setRemoveCandidate(null); }} className="flex-1">Entfernen</Button>
+              </div>
+            </Card>
+          </div>
         </div>
       )}
 
