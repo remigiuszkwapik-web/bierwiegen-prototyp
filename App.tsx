@@ -102,6 +102,7 @@ const App: React.FC = () => {
   const devModeRef = useRef(IS_DEV_PARAM);
   useEffect(() => { devModeRef.current = devMode; }, [devMode]);
 
+  const [newPlayerName, setNewPlayerName] = useState('');
   const [joinName, setJoinName] = useState('');
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
@@ -276,9 +277,24 @@ const App: React.FC = () => {
     await updateGame(updater);
   }, [updateGame]);
 
+  const isNameTaken = (players: Player[], name: string) =>
+    players.some(p => p.name.trim().toLowerCase() === name.trim().toLowerCase());
+
+  const addPlayer = () => {
+    const name = newPlayerName.trim();
+    if (!name) return;
+    if (game && isNameTaken(game.players, name)) { alert('Den Namen gibt es schon.'); return; }
+    updateGameFresh(p => p ? {
+      ...p,
+      players: isNameTaken(p.players, name) ? p.players
+        : [...p.players, { id: createId(), name, weights: [], deviations: [], penalties: 0 }],
+    } : null);
+    setNewPlayerName('');
+  };
+
   /**
-   * Selbst in der Lobby eintragen: Spieler anlegen und direkt an dieses Gerät
-   * binden. Gleicher Name vom selben Gerät = derselbe Spieler (z. B. nach Neuladen).
+   * Selbst in der Lobby eintragen: Spieler anlegen (oder einen freien Spieler
+   * gleichen Namens übernehmen) und direkt an dieses Gerät binden.
    * Weil jedes Gerät die ganze Spielzeile schreibt, kann ein zeitgleicher
    * Beitritt den eigenen überschreiben – darum danach nachprüfen und bei
    * Bedarf erneut eintragen.
@@ -687,7 +703,7 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                 </>
               )}
               <p className="text-[10px] font-bold text-slate-500 uppercase mb-3">
-                {inSetup ? `In der Lobby (${game.players.length})` : 'Wähle deinen Spieler'}
+                {inSetup ? `In der Lobby (${game.players.length}) · steht dein Name schon da? antippen` : 'Wähle deinen Spieler'}
               </p>
               <div className="grid gap-2 mb-4">
                 {game.players.map(p => (
@@ -711,6 +727,24 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                 ))}
               </div>
             </>
+          )}
+
+          {/* Creator: Mitspieler schnell selbst eintragen – die suchen sich dann oben aus */}
+          {isCreator && inSetup && (
+            <div className="mb-6">
+              <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Mitspieler eintragen</p>
+              <div className="flex gap-2">
+                <Input
+                  value={newPlayerName}
+                  onChange={(e) => setNewPlayerName(e.target.value)}
+                  placeholder="Name..."
+                  maxLength={20}
+                  className="flex-1"
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addPlayer(); } }}
+                />
+                <Button variant="secondary" onClick={addPlayer}>Add</Button>
+              </div>
+            </div>
           )}
 
           {/* Creator: Link teilen + Start */}
@@ -877,7 +911,7 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                 <span
                   key={p.id}
                   className={`px-3 py-1.5 rounded-full text-xs font-bold ${p.id === myPlayerId ? 'bg-amber-500/15 text-amber-400 border border-amber-500/40' : 'bg-slate-900/60 text-slate-300 border border-slate-700'}`}
-                >{p.name}</span>
+                >{p.name}{!p.userId && <span className="text-slate-500 font-normal"> · noch frei</span>}</span>
               ))}
             </div>
             {isCreator && (
