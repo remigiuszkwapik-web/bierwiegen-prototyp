@@ -4,7 +4,7 @@ import Lottie from 'lottie-react';
 import cheersAnimation from './src/assets/cheers.json';
 import { Game, GameStatus, Player, Round, Reaction, Ping, BottleSize, DrinkType } from './types';
 import { SupabaseGameRepository, isSupabaseConfigured } from './repositories/GameRepository';
-import { Card, Button, Input, FloatingReaction, EmojiBar, PlacementCard, SwipeTabs, SwipePage, DotBadge, CountBadge } from './components/UI';
+import { Card, Button, Input, FloatingReaction, RisingReaction, EmojiBar, PlacementCard, SwipeTabs, SwipePage, DotBadge, CountBadge } from './components/UI';
 import { BOTTLE_SIZES, DRINK_THEMES, DRINK_STORAGE_KEY, applyDrinkTheme } from './constants';
 import {
   calculateAverageDeviation,
@@ -1687,11 +1687,6 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                 title={`Getränk: ${DRINK_THEMES[myDrink].label} (tippen zum Wechseln)`}
                 className="text-lg leading-none"
               >{DRINK_THEMES[myDrink].emoji}</button>
-              <span className="relative">
-                {recentReactions(reactions)
-                  .filter(r => r.targetPlayerId === myPlayerId)
-                  .map(r => <FloatingReaction key={r.id} emoji={r.emoji} />)}
-              </span>
             </h1>
           </div>
           <div className="flex items-center gap-4 text-right">
@@ -1733,6 +1728,15 @@ VITE_SUPABASE_ANON_KEY=...</pre>
         </div>
 
         <SwipeTabs pages={dashboardPages} active={currentPage} onActiveChange={setActivePage} />
+
+        {/* Emojis, die an mich gehen, steigen aus der Aktionsleiste auf – auf jeder Seite. */}
+        <div className="relative flex-none">
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-0 z-20" aria-live="polite">
+            {recentReactions(reactions)
+              .filter(r => r.targetPlayerId === myPlayerId)
+              .map(r => <RisingReaction key={r.id} reaction={r} />)}
+          </div>
+        </div>
 
         {dockAction && (
           <div className="flex-none px-4 pt-3 pb-4 border-t border-slate-800 bg-slate-900">

@@ -88,6 +88,25 @@ export const FloatingReaction: React.FC<{ emoji: string }> = ({ emoji }) => {
   );
 };
 
+/**
+ * Reaktion an mich: steigt groß vom unteren Rand (über der Aktionsleiste) auf.
+ * Position und Drift leiten sich aus der ID ab, damit mehrere Emojis nicht
+ * übereinander kleben und beim Neu-Rendern nicht springen.
+ */
+export const RisingReaction: React.FC<{ reaction: { id: string; emoji: string } }> = ({ reaction }) => {
+  const hash = [...reaction.id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
+  const left = 20 + (hash % 61);            // 20–80 % der Breite
+  const drift = ((hash >> 8) % 41) - 20;    // -20…+20 px seitlich
+  return (
+    <span
+      role="img"
+      aria-label={`Reaktion ${reaction.emoji}`}
+      className="reaction-rise absolute bottom-6 text-5xl drop-shadow-lg"
+      style={{ left: `${left}%`, ['--drift' as string]: `${drift}px` }}
+    >{reaction.emoji}</span>
+  );
+};
+
 export const EmojiBar: React.FC<{ onReact: (emoji: string) => void }> = ({ onReact }) => {
   const emojis = ['🍻', '🔥', '🎯', '💀', '🤡', '🚀'];
   return (
