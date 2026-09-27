@@ -1544,7 +1544,18 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                 </div>
               ))}
             </div>
-            {isCreator && <Button onClick={() => updateGame(() => null)} className="w-full py-4 font-bungee">MENÜ</Button>}
+            {isCreator && (
+              <div className="space-y-3">
+                {/* Das Finale wird über Schwellwerte der Flaschengröße ausgelöst –
+                    bei anderen Gefäßen ist dann oft noch etwas drin. Der Host
+                    kann deshalb beliebig oft eine weitere Runde anhängen. */}
+                <Button
+                  onClick={() => updateGame(p => p ? { ...p, status: GameStatus.SETTING_TARGET } : null)}
+                  className="w-full py-4 font-bungee"
+                >NOCH EINE RUNDE</Button>
+                <Button variant="secondary" onClick={() => updateGame(() => null)} className="w-full py-4 font-bungee">MENÜ</Button>
+              </div>
+            )}
           </Card>
         )}
 
