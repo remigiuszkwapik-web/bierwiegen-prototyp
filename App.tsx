@@ -1633,7 +1633,6 @@ VITE_SUPABASE_ANON_KEY=...</pre>
           >
             <div className="font-bungee text-xl leading-tight">Hey {myPlayer?.name}!</div>
             <div className="text-sm font-bold">{myPingText}</div>
-            {myPing?.from && <div className="text-[10px] font-bold uppercase opacity-70 mt-1">{myPing.from} wartet auf dich · tippen zum Schließen</div>}
           </button>
         </>
       )}
