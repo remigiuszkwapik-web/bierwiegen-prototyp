@@ -4,7 +4,7 @@ import Lottie from 'lottie-react';
 import cheersAnimation from './src/assets/cheers.json';
 import { Game, GameStatus, Player, Round, Reaction, Ping, BottleSize, DrinkType } from './types';
 import { SupabaseGameRepository, isSupabaseConfigured } from './repositories/GameRepository';
-import { Card, Button, Input, BeerProgressBar, FloatingReaction, EmojiBar, PlacementCard, SwipeTabs, SwipePage, DotBadge, CountBadge } from './components/UI';
+import { Card, Button, Input, FloatingReaction, EmojiBar, PlacementCard, SwipeTabs, SwipePage, DotBadge, CountBadge } from './components/UI';
 import { BOTTLE_SIZES, DRINK_THEMES, DRINK_STORAGE_KEY, applyDrinkTheme } from './constants';
 import {
   calculateAverageDeviation,
@@ -118,7 +118,7 @@ const App: React.FC = () => {
   const channelRef = useRef<ReturnType<typeof repo.subscribeToGame> | null>(null);
   // Pings pro Spieler-ID: wann zuletzt angepingt und von wem. Lebt nur lokal.
   const [pings, setPings] = useState<Record<string, { at: number; from: string }>>({});
-  // Aktive Seite im In-Game-Dashboard (0 = Aufgabe, 1 = Ranking, 2 = Ich).
+  // Aktive Seite im In-Game-Dashboard (0 = Aufgabe, 1 = Ranking, 2 = Details).
   const [activePage, setActivePage] = useState(0);
   // Neue Phase oder angepingt → zurück zur Aufgabe, dort passiert jetzt etwas.
   useEffect(() => { setActivePage(0); }, [game?.status, game?.currentRoundIndex]);
@@ -891,80 +891,76 @@ VITE_SUPABASE_ANON_KEY=...</pre>
     : 'Trag dein Gewicht ein!';
 
   // ─── Dashboard-Seiten ──────────────────────────────────────────────────
-  const myCardContent = (
-    <>
-        {myPlayer && (
-          <Card className="border-amber-500/30">
-            {(() => {
-              const devs = myPlayer.deviations;
-              const tag = getPlayerPerformanceTag(myPlayer, game.players, game.rounds);
-              const best = devs.length ? Math.min(...devs) : null;
-              const worst = devs.length ? Math.max(...devs) : null;
-              const last = devs.length ? devs[devs.length - 1] : null;
-              const wins = getRoundWins(myPlayerId!, game.players, game.rounds);
-              return (
-                <div className="flex items-start gap-4">
-                  <BeerProgressBar progress={getDrinkingProgress(myPlayer.weights.slice(-1)[0] || 0, myPlayer.weights[0] || 0, game.bottleSize)} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-end gap-8 mb-1">
-                      <div>
-                        <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">Gewicht</div>
-                        <div className="text-4xl font-bungee text-white">{myPlayer.weights.slice(-1)[0] || 0}g</div>
-                      </div>
-                      <div>
-                        <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">Trend</div>
-                        <div className={`text-4xl font-bungee ${getDeviationTrend(devs).color}`}>{getDeviationTrend(devs).label}</div>
-                      </div>
+  // Details-Seite: alles, was über den festen Werte-Streifen hinausgeht.
+  const myCardContent = myPlayer && (() => {
+    const devs = myPlayer.deviations;
+    const tag = getPlayerPerformanceTag(myPlayer, game.players, game.rounds);
+    const best = devs.length ? Math.min(...devs) : null;
+    const worst = devs.length ? Math.max(...devs) : null;
+    const last = devs.length ? devs[devs.length - 1] : null;
+    const wins = getRoundWins(myPlayer.id, game.players, game.rounds);
+    const current = lastWeight(myPlayer);
+    const drunk = current !== null && myPlayer.weights[0] ? myPlayer.weights[0] - current : null;
+    const stat = (label: string, value: React.ReactNode, color = 'text-white') => (
+      <div className="min-w-0">
+        <div className="text-[10px] font-bold text-slate-500 uppercase truncate">{label}</div>
+        <div className={`text-lg font-bungee ${color}`}>{value}</div>
+      </div>
+    );
+    return (
+      <>
+        <Card className="border-amber-500/30">
+          <div className="flex items-center gap-3">
+            <span className="text-3xl leading-none">{tag.icon}</span>
+            <div className="min-w-0">
+              <div className="font-bungee text-amber-500 uppercase">{tag.label}</div>
+              <p className="text-xs text-slate-400">{tag.description}</p>
+            </div>
+          </div>
+        </Card>
+
+        <Card>
+          <h2 className="text-xs font-bold text-slate-500 uppercase mb-3">Deine Statistik</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-4">
+            {stat('Letzte', last != null ? `${last}g` : '—')}
+            {stat('Beste', best != null ? `${best}g` : '—', 'text-green-400')}
+            {stat('Schlechteste', worst != null ? `${worst}g` : '—', 'text-red-400')}
+            {stat('Siege', wins, 'text-amber-400')}
+            {stat('Kassiert', myPlayer.penalties)}
+            {stat('Verteilt', getPenaltiesGiven(myPlayer.id, game.players, game.rounds))}
+            {stat('Getrunken', drunk != null ? `${drunk}g` : '—')}
+            {stat('Runden', devs.length)}
+          </div>
+        </Card>
+
+        {devs.length > 0 && (
+          <Card>
+            <h2 className="text-xs font-bold text-slate-500 uppercase mb-3">Rundenverlauf</h2>
+            <div className="flex gap-1.5">
+              {devs.map((dev, idx) => {
+                const playersWithDev = game.players.filter(p => p.deviations[idx] !== undefined);
+                const isWin = dev === Math.min(...playersWithDev.map(p => p.deviations[idx]));
+                const finalWeight = myPlayer.weights[idx + 1];
+                const target = game.rounds[idx]?.targetWeight;
+                const tooLittle = finalWeight != null && target != null && finalWeight > target;
+                const tooMuch = finalWeight != null && target != null && finalWeight < target;
+                return (
+                  <div key={idx} className={`flex-1 rounded-lg px-1 py-1.5 text-center border ${isWin ? 'bg-amber-500/10 border-amber-500/40' : 'bg-slate-800/60 border-slate-700'}`}>
+                    <div className={`text-[8px] font-bold uppercase mb-0.5 ${isWin ? 'text-amber-500' : 'text-slate-600'}`}>{isWin ? '★' : `R${idx + 1}`}</div>
+                    <div className="flex items-center justify-center gap-0.5 leading-none">
+                      <div className={`text-xs font-bungee ${isWin ? 'text-amber-400' : 'text-slate-300'}`}>{dev}g</div>
+                      <div className={`text-[8px] font-bold ${tooLittle ? 'text-red-400' : tooMuch ? 'text-blue-400' : 'text-green-400'}`}>{tooLittle ? '+' : tooMuch ? '-' : '●'}</div>
                     </div>
-                    <div className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1 mb-3">
-                      {tag.icon} {tag.label}
-                    </div>
-                    <div className="flex items-start gap-1 mb-3">
-                      <div className="grid grid-cols-4 gap-1 flex-1 min-w-0">
-                        <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Letzt.</div><div className="text-xs font-bungee text-white">{last ?? '—'}{last != null ? 'g' : ''}</div></div>
-                        <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Beste</div><div className="text-xs font-bungee text-green-400">{best ?? '—'}{best != null ? 'g' : ''}</div></div>
-                        <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Schle.</div><div className="text-xs font-bungee text-red-400">{worst ?? '—'}{worst != null ? 'g' : ''}</div></div>
-                        <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Siege</div><div className="text-xs font-bungee text-amber-400">{wins}</div></div>
-                      </div>
-                      <div className="w-px self-stretch bg-slate-700 mx-1" />
-                      <div className="grid grid-cols-2 gap-1">
-                        <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Kass.</div><div className="text-xs font-bungee text-white">{myPlayer.penalties}</div></div>
-                        <div className="min-w-0"><div className="text-[9px] text-slate-600 font-bold uppercase truncate">Vert.</div><div className="text-xs font-bungee text-white">{getPenaltiesGiven(myPlayerId!, game.players, game.rounds)}</div></div>
-                      </div>
-                    </div>
-                    {devs.length > 0 && (
-                      <>
-                        <div className="text-[9px] text-slate-600 font-bold uppercase mb-1">Rundenverlauf</div>
-                        <div className="flex gap-1.5">
-                          {devs.map((dev, idx) => {
-                            const playersWithDev = game.players.filter(p => p.deviations[idx] !== undefined);
-                            const isWin = dev === Math.min(...playersWithDev.map(p => p.deviations[idx]));
-                            const finalWeight = myPlayer.weights[idx + 1];
-                            const target = game.rounds[idx]?.targetWeight;
-                            const tooLittle = finalWeight != null && target != null && finalWeight > target;
-                            const tooMuch = finalWeight != null && target != null && finalWeight < target;
-                            return (
-                              <div key={idx} className={`flex-1 rounded-lg px-1 py-1.5 text-center border ${isWin ? 'bg-amber-500/10 border-amber-500/40' : 'bg-slate-800/60 border-slate-700'}`}>
-                                <div className={`text-[8px] font-bold uppercase mb-0.5 ${isWin ? 'text-amber-500' : 'text-slate-600'}`}>{isWin ? '★' : `R${idx + 1}`}</div>
-                                <div className="flex items-center justify-center gap-0.5 leading-none">
-                                  <div className={`text-xs font-bungee ${isWin ? 'text-amber-400' : 'text-slate-300'}`}>{dev}g</div>
-                                  <div className={`text-[8px] font-bold ${tooLittle ? 'text-red-400' : tooMuch ? 'text-blue-400' : 'text-green-400'}`}>{tooLittle ? '+' : tooMuch ? '-' : '●'}</div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </>
-                    )}
                   </div>
-                </div>
-              );
-            })()}
+                );
+              })}
+            </div>
+            <p className="text-[10px] text-slate-500 mt-2"><span className="text-red-400 font-bold">+</span> zu wenig · <span className="text-blue-400 font-bold">-</span> zu viel getrunken · ★ Rundensieg</p>
           </Card>
         )}
-
-    </>
-  );
+      </>
+    );
+  })();
 
   const taskContent = (
     <>
@@ -1596,7 +1592,7 @@ VITE_SUPABASE_ANON_KEY=...</pre>
     />
   );
 
-  // Rundenübersicht für die "Ich"-Seite: Ziel, eigene Abweichung, Sieger.
+  // Rundenübersicht für die Details-Seite: Ziel, eigene Abweichung, Sieger.
   const myRounds = myPlayer ? game.rounds.slice(0, myPlayer.deviations.length) : [];
   const roundsTable = myPlayer && myRounds.length > 0 && (
     <Card>
@@ -1645,7 +1641,7 @@ VITE_SUPABASE_ANON_KEY=...</pre>
     : game.players.filter(p => p.id !== myPlayerId && waitingOn(p)).length;
 
   const taskPage: SwipePage = { key: 'task', label: taskLabel[game.status], badge: iNeedToAct ? <DotBadge /> : undefined, content: taskContent };
-  const mePage: SwipePage = { key: 'me', label: 'Ich', content: <>{myCardContent}{roundsTable}</> };
+  const mePage: SwipePage = { key: 'me', label: 'Details', content: <>{myCardContent}{roundsTable}</> };
   const dashboardPages: SwipePage[] =
     game.status === GameStatus.SETUP ? [taskPage]
     : game.status === GameStatus.FINISHED ? [taskPage, mePage]
@@ -1710,6 +1706,29 @@ VITE_SUPABASE_ANON_KEY=...</pre>
             )}
           </div>
         </header>
+
+        {/* Fester Werte-Streifen: bleibt über allen Tabs stehen. Details liegen auf der Ich-Seite. */}
+        {myPlayer && game.status !== GameStatus.SETUP && (() => {
+          const devs = myPlayer.deviations;
+          const trend = getDeviationTrend(devs);
+          const rank = [...game.players]
+            .sort((a, b) => calculateAverageDeviation(a.deviations) - calculateAverageDeviation(b.deviations))
+            .findIndex(p => p.id === myPlayer.id) + 1;
+          const fill = Math.round(getDrinkingProgress(myPlayer.weights.slice(-1)[0] || 0, myPlayer.weights[0] || 0, game.bottleSize) * 100);
+          return (
+            <div className="flex items-center gap-4 px-4 py-3 rounded-2xl bg-slate-800/50 border border-amber-500/30">
+              <div className="w-5 h-11 shrink-0 rounded-md border-2 border-slate-700 bg-slate-900 overflow-hidden flex flex-col justify-end" aria-label={`Flasche ${fill}% voll`}>
+                <div className="w-full bg-amber-500 transition-all duration-1000" style={{ height: `${fill}%` }} />
+              </div>
+              <div className="flex-1 grid grid-cols-4 gap-2">
+                <div className="min-w-0"><div className="text-[9px] font-bold text-slate-500 uppercase truncate">Gewicht</div><div className="font-bungee text-base text-white">{myPlayer.weights.slice(-1)[0] ?? '—'}{myPlayer.weights.length ? 'g' : ''}</div></div>
+                <div className="min-w-0"><div className="text-[9px] font-bold text-slate-500 uppercase truncate">Ø Abw.</div><div className="font-bungee text-base text-amber-500">{devs.length ? `${calculateAverageDeviation(devs)}g` : '—'}</div></div>
+                <div className="min-w-0"><div className="text-[9px] font-bold text-slate-500 uppercase truncate">Platz</div><div className="font-bungee text-base text-white">{devs.length ? `#${rank}` : '—'}</div></div>
+                <div className="min-w-0"><div className="text-[9px] font-bold text-slate-500 uppercase truncate">Trend</div><div className={`font-bungee text-base ${trend.color}`}>{trend.label}</div></div>
+              </div>
+            </div>
+          );
+        })()}
 
         </div>
 
