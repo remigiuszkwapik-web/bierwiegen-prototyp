@@ -89,20 +89,21 @@ export const FloatingReaction: React.FC<{ emoji: string }> = ({ emoji }) => {
 };
 
 /**
- * Reaktion an mich: steigt groß vom unteren Rand (über der Aktionsleiste) auf.
- * Position und Drift leiten sich aus der ID ab, damit mehrere Emojis nicht
+ * Reaktion an mich: schlängelt sich vom unteren Rand (über der Aktionsleiste)
+ * nach oben und verblasst. Position und Ausschlag leiten sich aus der ID ab, damit mehrere Emojis nicht
  * übereinander kleben und beim Neu-Rendern nicht springen.
  */
 export const RisingReaction: React.FC<{ reaction: { id: string; emoji: string } }> = ({ reaction }) => {
   const hash = [...reaction.id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
   const left = 20 + (hash % 61);            // 20–80 % der Breite
-  const drift = ((hash >> 8) % 41) - 20;    // -20…+20 px seitlich
+  // Schlängel-Ausschlag 6–14 px, Richtung zufällig – so schwingen mehrere Emojis nicht im Gleichtakt.
+  const wiggle = (6 + ((hash >> 8) % 9)) * ((hash >> 16) % 2 ? 1 : -1);
   return (
     <span
       role="img"
       aria-label={`Reaktion ${reaction.emoji}`}
       className="reaction-rise absolute bottom-6 text-3xl drop-shadow-lg"
-      style={{ left: `${left}%`, ['--drift' as string]: `${drift}px` }}
+      style={{ left: `${left}%`, ['--wig' as string]: `${wiggle}px` }}
     >{reaction.emoji}</span>
   );
 };
