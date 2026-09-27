@@ -1,0 +1,572 @@
+<title>Bierwiegen Dashboard-Pager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Inter:wght@400;500;600;700;800&display=swap">
+<style>
+  /* Einzelnes, dunkles Farbschema – übernimmt die Tokens der App (slate + amber). */
+  :root {
+    color-scheme: dark;
+    --bg: #0b1120;
+    --app: #0f172a;
+    --card: rgba(30, 41, 59, .5);
+    --card-solid: #1e293b;
+    --inset: rgba(15, 23, 42, .4);
+    --line: #334155;
+    --line-soft: #1e293b;
+    --text: #f8fafc;
+    --muted: #94a3b8;
+    --dim: #64748b;
+    --dimmer: #475569;
+    --ac: #f59e0b;
+    --ac-h: #fbbf24;
+    --green: #4ade80;
+    --red: #f87171;
+    --blue: #60a5fa;
+    --yellow: #fde047;
+    --display: 'Bungee', 'Arial Black', system-ui, sans-serif;
+    --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.5;
+    padding-inline: 16px;
+    padding-block: 40px 80px;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }
+
+  .wrap { max-width: 1240px; margin-inline: auto; display: flex; flex-direction: column; gap: 40px; }
+
+  /* ── Kopf der Präsentationsseite ── */
+  .intro { display: flex; flex-direction: column; gap: 12px; max-width: 68ch; }
+  .eyebrow { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .12em; color: var(--ac); }
+  h1 { font-family: var(--display); font-weight: 400; font-size: clamp(28px, 5vw, 44px); line-height: 1.05; margin: 0; text-wrap: balance; }
+  .intro p { margin: 0; color: var(--muted); }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; padding: 16px; border: 1px solid var(--line-soft); border-radius: 20px; background: #0f172a; }
+  .controls .lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--dim); }
+  .seg { display: flex; flex-wrap: wrap; gap: 4px; background: #020617; padding: 4px; border-radius: 14px; border: 1px solid var(--line-soft); }
+  .seg button { border: 0; background: transparent; padding: 8px 12px; border-radius: 10px; font-size: 13px; font-weight: 600; color: var(--muted); }
+  .seg button[aria-pressed="true"] { background: var(--ac); color: #0f172a; }
+  .controls .hint { font-size: 13px; color: var(--dim); margin-left: auto; }
+
+  /* ── Varianten-Raster ── */
+  .variants { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 40px 28px; align-items: start; }
+  .variant { display: flex; flex-direction: column; gap: 18px; align-items: center; }
+  .v-head { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 4px; }
+  .v-head .tag { font-family: var(--display); font-size: 13px; color: var(--ac); }
+  .v-head h2 { margin: 0; font-size: 20px; font-weight: 800; }
+  .v-head p { margin: 0; font-size: 14px; color: var(--muted); }
+  .pc { width: 100%; max-width: 360px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; font-size: 13px; color: var(--muted); }
+  .pc h3 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .1em; }
+  .pc .pro h3 { color: var(--green); }
+  .pc .con h3 { color: var(--red); }
+  .pc ul { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 4px; }
+
+  /* ── Telefon-Rahmen ── */
+  .phone {
+    width: 100%; max-width: 360px; height: 760px;
+    border-radius: 44px; padding: 10px;
+    background: #1f2937;
+    box-shadow: 0 0 0 1px #374151, 0 30px 60px -20px rgba(0,0,0,.7);
+  }
+  .screen {
+    height: 100%; border-radius: 36px; overflow: hidden; position: relative;
+    background: var(--app); display: flex; flex-direction: column;
+  }
+  .statusbar { height: 34px; flex: none; display: flex; justify-content: space-between; align-items: center; padding: 0 24px; font-size: 12px; font-weight: 700; }
+  .statusbar .isl { width: 90px; height: 24px; background: #000; border-radius: 20px; }
+
+  /* ── App-Elemente (spiegeln UI.tsx) ── */
+  .appbar { flex: none; display: flex; justify-content: space-between; align-items: flex-end; padding: 6px 16px 10px; }
+  .appbar .who small { display: block; font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--dim); }
+  .appbar .who b { font-family: var(--display); font-weight: 400; font-size: 20px; color: var(--ac); line-height: 1.1; }
+  .appbar .meta { display: flex; gap: 12px; font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--dim); }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 24px; padding: 18px; }
+  .card.ac { border-color: rgba(245,158,11,.4); }
+  .ctr { text-align: center; }
+  .k { font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--dim); letter-spacing: .04em; }
+  .d { font-family: var(--display); font-weight: 400; }
+  .btn { display: block; width: 100%; border: 0; border-radius: 16px; padding: 14px; font-family: var(--display); font-size: 15px; background: var(--ac); color: #0f172a; box-shadow: 0 10px 25px -5px rgba(245,158,11,.25); }
+  .btn:disabled { opacity: .45; box-shadow: none; }
+  .btn.sec { background: #334155; color: var(--text); box-shadow: none; }
+  .ping { border: 2px solid var(--yellow); color: var(--yellow); background: transparent; border-radius: 999px; padding: 6px 12px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+
+  .pagew { display: flex; flex-direction: column; gap: 12px; }
+  .h-sec { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--dim); letter-spacing: .06em; }
+
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 14px; background: var(--inset); }
+  .row.me { background: rgba(245,158,11,.1); box-shadow: inset 0 0 0 1px rgba(245,158,11,.25); }
+  .row .l { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
+  .rk { font-family: var(--display); font-size: 10px; color: var(--dimmer); width: 20px; }
+  .nm { font-weight: 700; font-size: 14px; }
+  .st { font-size: 9px; font-weight: 700; text-transform: uppercase; }
+  .st.wait { color: var(--yellow); }
+  .st.ok { color: var(--green); }
+  .emo { display: flex; gap: 2px; background: rgba(15,23,42,.8); border: 1px solid var(--line); border-radius: 999px; padding: 2px 4px; font-size: 12px; }
+  .emo span { padding: 1px 2px; }
+  .rowx { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 14px; background: var(--inset); }
+  .rowx .sub { display: flex; justify-content: flex-end; align-items: center; gap: 6px; }
+  .rowx .sub .ping { margin-right: auto; }
+  .chg-up { color: var(--green); font-size: 10px; font-weight: 700; }
+  .chg-dn { color: var(--red); font-size: 10px; font-weight: 700; }
+  .chg-0 { color: var(--dimmer); font-size: 10px; font-weight: 700; }
+
+  .res { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-radius: 14px; border: 1px solid var(--line); background: var(--inset); }
+  .res.win { background: rgba(34,197,94,.1); border-color: rgba(34,197,94,.3); }
+  .pill { font-size: 8px; font-weight: 700; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; }
+  .pill.g { color: #22c55e; background: rgba(34,197,94,.2); }
+  .pill.a { color: var(--ac); background: rgba(245,158,11,.2); }
+  .pen-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .pen-grid button { border: 1px solid #475569; background: #1e293b; border-radius: 12px; padding: 10px; font-weight: 700; font-size: 13px; }
+
+  .beer { width: 34px; height: 84px; border: 2px solid var(--line); border-radius: 10px; background: #0f172a; overflow: hidden; display: flex; align-items: flex-end; flex: none; }
+  .beer i { display: block; width: 100%; background: var(--ac); }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 8px; }
+  .stats .v { font-family: var(--display); font-size: 14px; }
+  .hist { display: flex; gap: 6px; }
+  .hist div { flex: 1; border: 1px solid var(--line); background: rgba(30,41,59,.6); border-radius: 10px; padding: 6px 2px; text-align: center; }
+  .hist div.w { background: rgba(245,158,11,.1); border-color: rgba(245,158,11,.4); }
+  .hist .t { font-size: 8px; font-weight: 700; color: var(--dimmer); }
+  .hist div.w .t { color: var(--ac); }
+  .tbl { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .tbl th { text-align: left; font-size: 9px; text-transform: uppercase; color: var(--dim); font-weight: 700; padding: 0 0 6px; }
+  .tbl td { padding: 7px 0; border-top: 1px solid var(--line-soft); }
+  .tbl td.r, .tbl th.r { text-align: right; }
+
+  .inp { display: flex; justify-content: center; }
+  .inp div { width: 150px; border: 1px solid var(--line); background: rgba(15,23,42,.5); border-radius: 16px; padding: 10px 14px; font-family: var(--display); font-size: 22px; display: flex; justify-content: space-between; color: var(--dimmer); }
+  .inp div b { font-weight: 400; color: var(--muted); }
+
+  /* ── Pager ── */
+  .pager { flex: 1; min-height: 0; display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; }
+  .pager::-webkit-scrollbar { display: none; }
+  .page { flex: 0 0 100%; min-width: 0; scroll-snap-align: start; scroll-snap-stop: always; overflow-y: auto; padding: 4px 16px 20px; scrollbar-width: none; }
+  .page::-webkit-scrollbar { display: none; }
+  .page-title { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+  .page-title b { font-family: var(--display); font-weight: 400; font-size: 16px; }
+
+  /* Variante A: Punkte + Label unten */
+  .dots-bar { flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 0 14px; border-top: 1px solid var(--line-soft); }
+  .dots { display: flex; gap: 8px; }
+  .dots button { width: 8px; height: 8px; padding: 0; border: 0; border-radius: 99px; background: var(--dimmer); transition: width .25s, background .25s; }
+  .dots button[aria-current="true"] { width: 24px; background: var(--ac); }
+  .dots-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
+
+  /* Variante B: Tabs oben */
+  .tabs { flex: none; position: relative; display: grid; grid-template-columns: repeat(3, 1fr); margin: 0 16px 10px; background: #020617; border: 1px solid var(--line-soft); border-radius: 14px; padding: 3px; }
+  .tabs .ind { position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc((100% - 6px) / 3); border-radius: 11px; background: var(--card-solid); box-shadow: inset 0 0 0 1px var(--line); transition: transform .05s linear; }
+  .tabs button { position: relative; border: 0; background: transparent; padding: 8px 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--dim); display: flex; justify-content: center; align-items: center; gap: 5px; }
+  .tabs button[aria-selected="true"] { color: var(--text); }
+  .badge { min-width: 16px; height: 16px; padding: 0 4px; border-radius: 99px; background: var(--yellow); color: #0f172a; font-size: 9px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; }
+  .badge.dot { min-width: 7px; width: 7px; height: 7px; padding: 0; background: var(--ac); }
+
+  /* Variante C: Status-Streifen + Peek + Dock */
+  .strip { flex: none; margin: 0 16px 10px; display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 18px; background: var(--card); border: 1px solid rgba(245,158,11,.3); }
+  .strip .beer { width: 18px; height: 40px; border-width: 1.5px; border-radius: 6px; }
+  .strip .cells { flex: 1; display: grid; grid-template-columns: repeat(4, auto); justify-content: space-between; gap: 6px; }
+  .strip .cells .v { font-family: var(--display); font-size: 15px; line-height: 1.1; }
+  .peek { padding-inline: 16px; gap: 10px; scroll-padding-inline: 16px; }
+  .peek .page { flex: 0 0 calc(100% - 44px); padding: 0; border-radius: 24px; }
+  .peek .page .card { min-height: 100%; }
+  .peek-tail { flex: 0 0 6px; }
+  .dock { flex: none; padding: 10px 16px 16px; border-top: 1px solid var(--line-soft); background: rgba(15,23,42,.95); display: flex; flex-direction: column; gap: 8px; }
+  .dock .mini { display: flex; justify-content: space-between; align-items: center; }
+  .dock .mini .dots button { width: 6px; height: 6px; }
+  .dock .mini .dots button[aria-current="true"] { width: 18px; }
+  .dock .mini .lab { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--dim); letter-spacing: .08em; }
+
+  /* ── Empfehlung / Hinweise ── */
+  .notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+  .note { border: 1px solid var(--line-soft); background: #0f172a; border-radius: 20px; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
+  .note h2 { margin: 0; font-size: 17px; font-weight: 800; }
+  .note.rec { border-color: rgba(245,158,11,.45); }
+  .note.rec h2 { color: var(--ac); }
+  .note p, .note li { color: var(--muted); font-size: 14px; margin: 0; }
+  .note ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+  .note b { color: var(--text); font-weight: 600; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .dots button, .tabs .ind { transition: none; }
+    .pager { scroll-behavior: auto; }
+  }
+</style>
+
+<div class="wrap">
+  <header class="intro">
+    <span class="eyebrow">Designentwurf · In-Game-Dashboard</span>
+    <h1>Nebeneinander statt untereinander</h1>
+    <p>Die Bereiche des Dashboards (aktuelle Aufgabe, Ranking, eigene Werte) liegen als Seiten nebeneinander und werden seitlich gewischt. Drei Varianten zeigen unterschiedliche Navigationsmuster. Die Rahmen sind echt bedienbar: wischen, auf Punkte oder Tabs tippen, oben die Spielphase wechseln.</p>
+  </header>
+
+  <div class="controls" role="group" aria-label="Spielphase">
+    <span class="lbl">Spielphase</span>
+    <div class="seg" id="phaseSeg">
+      <button type="button" data-phase="wait" aria-pressed="true">Ziel wird gewählt</button>
+      <button type="button" data-phase="drink" aria-pressed="false">Trinken</button>
+      <button type="button" data-phase="weigh" aria-pressed="false">Endwiegen</button>
+      <button type="button" data-phase="result" aria-pressed="false">Rundenergebnis</button>
+    </div>
+    <span class="hint">Bei jedem Phasenwechsel springen alle Varianten zurück auf die Aufgabe.</span>
+  </div>
+
+  <section class="variants">
+    <article class="variant">
+      <div class="v-head">
+        <span class="tag">A · Punkte</span>
+        <h2>Vollbild-Seiten mit Page-Indikator</h2>
+        <p>Drei gleich große Seiten, unten Punkte mit Seitennamen. Die schlichteste Umsetzung, sehr nah an iOS/Android-Onboarding.</p>
+      </div>
+      <div class="phone"><div class="screen" id="phoneA"></div></div>
+      <div class="pc">
+        <div class="pro"><h3>Pro</h3><ul><li>Maximal Platz pro Seite</li><li>Wenig Code, reines CSS-Snapping</li></ul></div>
+        <div class="con"><h3>Contra</h3><ul><li>Andere Seiten sind unsichtbar, Wischen muss man kennen</li><li>Kein Hinweis, wo etwas passiert</li></ul></div>
+      </div>
+    </article>
+
+    <article class="variant">
+      <div class="v-head">
+        <span class="tag">B · Tabs</span>
+        <h2>Beschriftete Tabs mit Status-Badges</h2>
+        <p>Segment-Leiste oben, synchron zum Wischen. Badges zeigen, wo gerade etwas von dir gebraucht wird oder auf wen gewartet wird.</p>
+      </div>
+      <div class="phone"><div class="screen" id="phoneB"></div></div>
+      <div class="pc">
+        <div class="pro"><h3>Pro</h3><ul><li>Alle Bereiche sofort benannt und antippbar</li><li>Badges ersetzen das Scrollen „um nachzusehen“</li></ul></div>
+        <div class="con"><h3>Contra</h3><ul><li>Kostet ca. 44 px Höhe</li><li>Bei mehr als 4 Seiten wird es eng</li></ul></div>
+      </div>
+    </article>
+
+    <article class="variant">
+      <div class="v-head">
+        <span class="tag">C · Peek + Dock</span>
+        <h2>Karten-Karussell mit festem Aktions-Dock</h2>
+        <p>Deine Werte stehen als schmaler Streifen immer oben. Die nächste Karte lugt rechts hervor, die Hauptaktion bleibt unten fest verankert.</p>
+      </div>
+      <div class="phone"><div class="screen" id="phoneC"></div></div>
+      <div class="pc">
+        <div class="pro"><h3>Pro</h3><ul><li>Wischbarkeit ist sichtbar</li><li>Hauptaktion (WIEGEN) von jeder Seite erreichbar</li></ul></div>
+        <div class="con"><h3>Contra</h3><ul><li>Weniger Breite pro Karte</li><li>Meiste Umbauarbeit im Code</li></ul></div>
+      </div>
+    </article>
+  </section>
+
+  <section class="notes">
+    <div class="note rec">
+      <h2>Empfehlung: B als Basis, Dock aus C</h2>
+      <p>Die Tabs lösen das eigentliche Problem am direktesten: Man sieht auf einen Blick, dass es Ranking und eigene Werte gibt, und die Badges sagen, ob sich ein Blick lohnt. Das feste Aktions-Dock aus C lässt sich darunter ergänzen, sodass WIEGEN oder EINWIEGEN auch aus dem Ranking heraus erreichbar ist.</p>
+    </div>
+    <div class="note">
+      <h2>Verhalten, das in allen Varianten gilt</h2>
+      <ul>
+        <li><b>Phasenwechsel</b> springt automatisch auf die Aufgaben-Seite zurück.</li>
+        <li><b>Anpingen</b> (gelber Rahmen) bringt die angepingte Person ebenfalls dorthin.</li>
+        <li><b>Jede Seite scrollt vertikal für sich</b>, der Kopf bleibt stehen.</li>
+        <li><b>Ergebnis-Phase</b>: Seite 1 zeigt Rundenergebnis und Strafe, Seite 2 die Gesamtwertung mit ▲▼.</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h2>Hinweise für die Umsetzung</h2>
+      <ul>
+        <li>Pager als <b>CSS Scroll-Snap</b> (<code>snap-x snap-mandatory</code>), aktiver Index per <code>scroll</code>-Event, keine Library nötig.</li>
+        <li>Der Ziel-Slider in „Ziel wählen“ braucht <code>touch-action: pan-y</code> auf dem Pager bzw. <code>stopPropagation</code>, sonst kollidiert er mit dem Wischen.</li>
+        <li>Seiten als eigene Komponenten aus <code>App.tsx</code> herauslösen: <code>TaskPage</code>, <code>RankingPage</code>, <code>MyStatsPage</code>.</li>
+        <li>Ab ca. 700 px Breite (Tablet) können die Seiten wieder nebeneinander ohne Pager stehen.</li>
+      </ul>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+  // ── Demo-Daten wie im Dev-Modus (?dev=true): Max, Anna, Ben, Lisa ──
+  const ME = 'Max';
+  const players = [
+    { name: 'Max',  avg: 2,    pen: 0, given: 2 },
+    { name: 'Anna', avg: 8,    pen: 1, given: 0 },
+    { name: 'Ben',  avg: 9.5,  pen: 0, given: 0 },
+    { name: 'Lisa', avg: 11.5, pen: 1, given: 0 },
+  ];
+  const TARGET = 548, MY_WEIGHT = 648;
+  const result = [ // Runde 3, sortiert nach Abweichung
+    { name: 'Max',  diff: 3 },
+    { name: 'Ben',  diff: 4 },
+    { name: 'Anna', diff: -12 },
+    { name: 'Lisa', diff: -19 },
+  ];
+  const overall = [ // Gesamt nach Runde 3
+    { name: 'Max',  avg: 2.3,  chg: 0,  pen: 0, given: 2 },
+    { name: 'Ben',  avg: 7.7,  chg: 1,  pen: 0, given: 0 },
+    { name: 'Anna', avg: 9.3,  chg: -1, pen: 1, given: 0 },
+    { name: 'Lisa', avg: 14,   chg: 0,  pen: 1, given: 0 },
+  ];
+  const history = [
+    { r: 1, target: 720, me: 2, sign: '-', winner: 'Max' },
+    { r: 2, target: 650, me: 2, sign: '-', winner: 'Max' },
+  ];
+
+  let phase = 'wait';
+
+  const waiting = (name) => {
+    if (phase === 'wait') return name === 'Lisa' ? 'wählt das Ziel' : null;
+    if (phase === 'weigh') return (name === 'Ben' || name === 'Lisa') ? 'fehlt noch' : null;
+    return null;
+  };
+  const weighedOk = (name) => phase === 'weigh' && !waiting(name);
+
+  const EMO = '<div class="emo"><span>🍻</span><span>🔥</span><span>🎯</span><span>💀</span><span>🤡</span><span>🚀</span></div>';
+
+  // ── Seiten ──
+  function taskInner(withButton = true) {
+    if (phase === 'wait') return `
+      <div class="card ctr" style="padding:32px 18px">
+        <div style="font-size:34px">⏳</div>
+        <div class="d" style="font-size:18px;margin:8px 0 4px">WARTE AUF LISA</div>
+        <div class="k" style="font-size:10px;color:var(--muted)">Lisa wählt das Ziel für diese Runde</div>
+        <div style="margin-top:16px"><button class="ping" type="button">📣 Anpingen</button></div>
+      </div>
+      <div class="card"><div class="k" style="margin-bottom:6px">Runde 3</div><div style="font-size:13px;color:var(--muted)">Lisa hat die leerste Flasche (598 g) und legt fest, wie viel alle trinken.</div></div>`;
+    if (phase === 'drink') return `
+      <div class="card ac ctr" style="padding:32px 18px">
+        <div class="k" style="color:var(--ac);font-size:11px">Ziel</div>
+        <div class="d" style="font-size:52px;line-height:1.1;margin:4px 0 12px">${TARGET}g</div>
+        <div style="display:inline-block;background:#0f172a;border-radius:12px;padding:8px 16px;margin-bottom:${withButton ? 20 : 0}px">
+          <div class="k">Trink</div><div class="d" style="font-size:22px;color:var(--ac-h)">${MY_WEIGHT - TARGET}g</div>
+        </div>
+        ${withButton ? '<button class="btn" type="button">WIEGEN</button>' : ''}
+      </div>`;
+    if (phase === 'weigh') return `
+      <div class="card">
+        <div class="d ctr" style="font-size:18px">ENDWIEGEN</div>
+        <div class="ctr" style="margin:8px 0 14px">
+          <div class="k">Ziel</div><div class="d" style="font-size:26px;color:var(--ac)">${TARGET}g</div>
+          <div class="k" style="margin-top:6px">Trink</div><div class="d" style="font-size:18px;color:var(--ac-h)">${MY_WEIGHT - TARGET}g</div>
+        </div>
+        <div class="inp"><div><span>...</span><b>G</b></div></div>
+        ${withButton ? '<button class="btn" type="button" style="margin-top:14px">EINWIEGEN</button>' : ''}
+        <div class="k ctr" style="margin-top:10px;font-size:10px">2/4 eingereicht</div>
+      </div>`;
+    // result
+    return `
+      <div class="card">
+        <div class="d ctr" style="font-size:18px;margin-bottom:12px">ERGEBNIS</div>
+        <div class="pagew" style="gap:8px">
+          ${result.map((p, i) => {
+            const col = p.diff === 0 ? 'var(--green)' : p.diff > 0 ? 'var(--red)' : 'var(--blue)';
+            const txt = p.diff === 0 ? 'Punktgelandet' : p.diff > 0 ? 'Zu wenig getrunken' : 'Zu viel getrunken';
+            return `<div class="res ${i === 0 ? 'win' : ''}">
+              <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span class="nm">${p.name}</span>
+                ${i === 0 ? '<span class="pill g">Sieger</span>' : ''}${i === result.length - 1 ? '<span class="pill a">Verlierer</span>' : ''}</div>
+              <div style="text-align:right"><div class="d" style="font-size:16px;color:${col}">${p.diff > 0 ? '+' : ''}${p.diff}g</div><div class="k" style="font-size:8px">${txt}</div></div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+      <div class="card ac">
+        <div class="d ctr" style="font-size:13px">DU HAST GEWONNEN!</div>
+        <div class="ctr" style="font-size:12px;color:var(--muted);margin:4px 0 12px">Wem gibst du die Strafe?</div>
+        <div class="pen-grid">${players.map(p => `<button type="button">${p.name}</button>`).join('')}</div>
+      </div>
+      ${withButton ? '<button class="btn" type="button" disabled>NÄCHSTE RUNDE</button>' : ''}`;
+  }
+
+  function rankingInner() {
+    if (phase === 'result') return `
+      <div class="card">
+        <div class="h-sec" style="margin-bottom:10px">Gesamt nach Runde 3</div>
+        <div class="pagew" style="gap:8px">
+          ${overall.map((p, i) => `<div class="row ${p.name === ME ? 'me' : ''}">
+            <div class="l"><span class="rk">#${i + 1}</span><span class="nm">${p.name}</span>
+              <span class="${p.chg > 0 ? 'chg-up' : p.chg < 0 ? 'chg-dn' : 'chg-0'}">${p.chg > 0 ? '▲' + p.chg : p.chg < 0 ? '▼' + (-p.chg) : '—'}</span></div>
+            <div style="display:flex;gap:8px;align-items:center"><span class="k">K:${p.pen} V:${p.given}</span><span class="d" style="font-size:13px;color:var(--ac)">${p.avg}g</span></div>
+          </div>`).join('')}
+        </div>
+      </div>`;
+    return `
+      <div class="card">
+        <div class="h-sec" style="margin-bottom:10px">Ranking · Ø Abweichung</div>
+        <div class="pagew" style="gap:8px">
+          ${players.map((p, i) => {
+            const w = waiting(p.name);
+            const status = w ? `<span class="st wait">⏳ ${w}</span>` : weighedOk(p.name) ? '<span class="st ok">✓ eingetragen</span>' : '';
+            if (p.name === ME) return `<div class="row me"><div class="l"><span class="rk">#${i + 1}</span><span class="nm">${p.name}</span>${status}</div><span class="d" style="font-size:12px">${p.avg}g</span></div>`;
+            return `<div class="rowx">
+              <div style="display:flex;justify-content:space-between;align-items:center"><div class="l"><span class="rk">#${i + 1}</span><span class="nm">${p.name}</span>${status}</div><span class="d" style="font-size:12px">${p.avg}g</span></div>
+              <div class="sub">${w ? '<button class="ping" type="button">📣 Anpingen</button>' : ''}${EMO}</div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+  }
+
+  function statsInner(withHead = true) {
+    return `
+      ${withHead ? `<div class="card ac">
+        <div style="display:flex;gap:14px;align-items:flex-start">
+          <div class="beer"><i style="height:62%"></i></div>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;gap:24px">
+              <div><div class="k">Gewicht</div><div class="d" style="font-size:28px">${MY_WEIGHT}g</div></div>
+              <div><div class="k">Trend</div><div class="d" style="font-size:28px;color:var(--muted)">→</div></div>
+            </div>
+            <div class="k" style="color:var(--muted);margin:4px 0 12px">👄 Orale Waage</div>
+            <div class="stats">
+              <div><div class="k">Letzte</div><div class="v">2g</div></div>
+              <div><div class="k">Beste</div><div class="v" style="color:var(--green)">2g</div></div>
+              <div><div class="k">Schlechteste</div><div class="v" style="color:var(--red)">2g</div></div>
+              <div><div class="k">Siege</div><div class="v" style="color:var(--ac-h)">2</div></div>
+              <div><div class="k">Kassiert</div><div class="v">0</div></div>
+              <div><div class="k">Verteilt</div><div class="v">2</div></div>
+            </div>
+          </div>
+        </div>
+      </div>` : ''}
+      <div class="card">
+        <div class="h-sec" style="margin-bottom:8px">Rundenverlauf</div>
+        <div class="hist">${history.map(h => `<div class="w"><div class="t">★ R${h.r}</div><div class="d" style="font-size:12px;color:var(--ac-h)">${h.me}g <span style="font-size:8px;color:var(--blue)">${h.sign}</span></div></div>`).join('')}<div><div class="t">R3</div><div class="d" style="font-size:12px;color:var(--dimmer)">…</div></div></div>
+      </div>
+      <div class="card">
+        <div class="h-sec" style="margin-bottom:8px">Runden im Detail</div>
+        <table class="tbl"><thead><tr><th>Runde</th><th class="r">Ziel</th><th class="r">Du</th><th class="r">Sieger</th></tr></thead>
+        <tbody>${history.map(h => `<tr><td>R${h.r}</td><td class="r">${h.target} g</td><td class="r">${h.me} g</td><td class="r">${h.winner}</td></tr>`).join('')}
+        <tr><td>R3</td><td class="r">${phase === 'wait' ? '—' : TARGET + ' g'}</td><td class="r">${phase === 'result' ? '3 g' : '—'}</td><td class="r">${phase === 'result' ? 'Max' : '—'}</td></tr></tbody></table>
+      </div>`;
+  }
+
+  const PAGES = [
+    { key: 'task', label: () => ({ wait: 'Runde', drink: 'Trinken', weigh: 'Wiegen', result: 'Ergebnis' })[phase] },
+    { key: 'rank', label: () => phase === 'result' ? 'Gesamt' : 'Ranking' },
+    { key: 'me',   label: () => 'Ich' },
+  ];
+
+  const statusbar = '<div class="statusbar"><span>21:48</span><span class="isl"></span><span>5G ▮▮▮</span></div>';
+  const appbar = `<div class="appbar"><div class="who"><small>Spieler</small><b>MAX 🍺</b></div><div class="meta"><span>Code: DEMO</span><span>Verlassen</span></div></div>`;
+
+  // Badges: Punkt = du bist gefragt, Zahl = auf so viele wird gewartet
+  function badgeFor(key) {
+    if (key === 'task' && (phase === 'drink' || phase === 'weigh' || phase === 'result')) return '<span class="badge dot" aria-label="Aktion nötig"></span>';
+    if (key === 'rank') {
+      const n = players.filter(p => waiting(p.name)).length;
+      if (n) return `<span class="badge" aria-label="${n} warten">${n}</span>`;
+    }
+    return '';
+  }
+
+  // ── Pager-Logik (gemeinsam) ──
+  function wire(root, onIndex) {
+    const pager = root.querySelector('.pager');
+    const pages = [...pager.querySelectorAll('.page')];
+    let cur = -1;
+    const update = () => {
+      const x = pager.scrollLeft + pager.clientWidth / 2;
+      let idx = 0;
+      pages.forEach((p, i) => { if (p.offsetLeft - pager.offsetLeft <= x) idx = i; });
+      const frac = pager.scrollLeft / Math.max(1, pager.scrollWidth - pager.clientWidth);
+      onIndex(idx, idx !== cur, frac);
+      cur = idx;
+    };
+    pager.addEventListener('scroll', update, { passive: true });
+    const go = (i) => {
+      const p = pages[i];
+      pager.scrollTo({ left: p.offsetLeft - pager.offsetLeft - (parseFloat(getComputedStyle(pager).scrollPaddingLeft) || 0), behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    };
+    root.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => go(+b.dataset.go)));
+    update();
+    return { go, pager };
+  }
+
+  const state = { A: 0, B: 0, C: 0 };
+
+  function renderA() {
+    const el = document.getElementById('phoneA');
+    el.innerHTML = statusbar + appbar + `
+      <div class="pager">
+        <section class="page" aria-label="${PAGES[0].label()}"><div class="pagew">${taskInner()}</div></section>
+        <section class="page" aria-label="${PAGES[1].label()}"><div class="pagew">${rankingInner()}</div></section>
+        <section class="page" aria-label="Ich"><div class="pagew">${statsInner()}</div></section>
+      </div>
+      <div class="dots-bar">
+        <div class="dots">${PAGES.map((p, i) => `<button type="button" data-go="${i}" aria-label="${p.label()}"></button>`).join('')}</div>
+        <div class="dots-lbl"></div>
+      </div>`;
+    const dots = el.querySelectorAll('.dots button'), lbl = el.querySelector('.dots-lbl');
+    return wire(el, (idx) => {
+      state.A = idx;
+      dots.forEach((d, i) => d.setAttribute('aria-current', i === idx));
+      lbl.textContent = PAGES[idx].label();
+    });
+  }
+
+  function renderB() {
+    const el = document.getElementById('phoneB');
+    el.innerHTML = statusbar + appbar + `
+      <div class="tabs" role="tablist">
+        <span class="ind"></span>
+        ${PAGES.map((p, i) => `<button type="button" role="tab" data-go="${i}">${p.label()}${badgeFor(p.key)}</button>`).join('')}
+      </div>
+      <div class="pager">
+        <section class="page" role="tabpanel"><div class="pagew">${taskInner()}</div></section>
+        <section class="page" role="tabpanel"><div class="pagew">${rankingInner()}</div></section>
+        <section class="page" role="tabpanel"><div class="pagew">${statsInner()}</div></section>
+      </div>`;
+    const tabs = el.querySelectorAll('.tabs button'), ind = el.querySelector('.tabs .ind');
+    return wire(el, (idx, changed, frac) => {
+      state.B = idx;
+      tabs.forEach((t, i) => t.setAttribute('aria-selected', i === idx));
+      ind.style.transform = `translateX(${frac * 200}%)`;
+    });
+  }
+
+  function renderC() {
+    const el = document.getElementById('phoneC');
+    const dock = {
+      wait: '<button class="btn sec" type="button">📣 LISA ANPINGEN</button>',
+      drink: '<button class="btn" type="button">WIEGEN</button>',
+      weigh: '<button class="btn" type="button" data-go="0">EINWIEGEN</button>',
+      result: '<button class="btn" type="button" disabled>NÄCHSTE RUNDE</button>',
+    }[phase];
+    const cLabels = [PAGES[0].label(), PAGES[1].label(), 'Verlauf'];
+    el.innerHTML = statusbar + appbar + `
+      <div class="strip">
+        <div class="beer"><i style="height:62%"></i></div>
+        <div class="cells">
+          <div><div class="k">Gewicht</div><div class="v">${MY_WEIGHT}g</div></div>
+          <div><div class="k">Ø Abw.</div><div class="v" style="color:var(--ac)">2g</div></div>
+          <div><div class="k">Platz</div><div class="v">#1</div></div>
+          <div><div class="k">Trend</div><div class="v" style="color:var(--muted)">→</div></div>
+        </div>
+      </div>
+      <div class="pager peek">
+        <section class="page"><div class="pagew">${taskInner(false)}</div></section>
+        <section class="page"><div class="pagew">${rankingInner()}</div></section>
+        <section class="page"><div class="pagew">${statsInner(false)}</div></section>
+        <div class="peek-tail" aria-hidden="true"></div>
+      </div>
+      <div class="dock">
+        <div class="mini"><span class="lab"></span><div class="dots">${cLabels.map((l, i) => `<button type="button" data-go="${i}" aria-label="${l}"></button>`).join('')}</div></div>
+        ${dock}
+      </div>`;
+    const dots = el.querySelectorAll('.dots button'), lab = el.querySelector('.mini .lab');
+    return wire(el, (idx) => {
+      state.C = idx;
+      dots.forEach((d, i) => d.setAttribute('aria-current', i === idx));
+      lab.textContent = cLabels[idx];
+    });
+  }
+
+  function renderAll() { renderA(); renderB(); renderC(); }
+
+  document.querySelectorAll('#phaseSeg button').forEach(b => b.addEventListener('click', () => {
+    phase = b.dataset.phase;
+    document.querySelectorAll('#phaseSeg button').forEach(x => x.setAttribute('aria-pressed', x === b));
+    renderAll(); // neu gerendert = Seite 1 (Aufgabe), wie im Konzept vorgesehen
+  }));
+
+  renderAll();
+})();
+</script>
