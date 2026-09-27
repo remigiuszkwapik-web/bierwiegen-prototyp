@@ -4,7 +4,7 @@ import Lottie from 'lottie-react';
 import cheersAnimation from './src/assets/cheers.json';
 import { Game, GameStatus, Player, Round, Reaction, Ping, BottleSize, DrinkType } from './types';
 import { SupabaseGameRepository, isSupabaseConfigured } from './repositories/GameRepository';
-import { Card, Button, Input, BeerProgressBar, FloatingReaction, EmojiBar, PlacementCard } from './components/UI';
+import { Card, Button, Input, BeerProgressBar, FloatingReaction, EmojiBar, PlacementCard, SwipeTabs, SwipePage, DotBadge, CountBadge } from './components/UI';
 import { BOTTLE_SIZES, DRINK_THEMES, DRINK_STORAGE_KEY, applyDrinkTheme } from './constants';
 import {
   calculateAverageDeviation,
@@ -118,6 +118,12 @@ const App: React.FC = () => {
   const channelRef = useRef<ReturnType<typeof repo.subscribeToGame> | null>(null);
   // Pings pro Spieler-ID: wann zuletzt angepingt und von wem. Lebt nur lokal.
   const [pings, setPings] = useState<Record<string, { at: number; from: string }>>({});
+  // Aktive Seite im In-Game-Dashboard (0 = Aufgabe, 1 = Ranking, 2 = Ich).
+  const [activePage, setActivePage] = useState(0);
+  // Neue Phase oder angepingt → zurück zur Aufgabe, dort passiert jetzt etwas.
+  useEffect(() => { setActivePage(0); }, [game?.status, game?.currentRoundIndex]);
+  const myPingAt = myPlayerId ? pings[myPlayerId]?.at : undefined;
+  useEffect(() => { if (myPingAt) setActivePage(0); }, [myPingAt]);
 
   const gameRef = useRef<Game | null>(null);
   useEffect(() => { gameRef.current = game; }, [game]);
@@ -884,51 +890,9 @@ VITE_SUPABASE_ANON_KEY=...</pre>
     : myWaiting === 'vergibt die Strafe' ? 'Du bist dran – vergib die Strafe!'
     : 'Trag dein Gewicht ein!';
 
-  return (
-    <div className={`min-h-screen${devMode ? ' pb-20' : ''}`}>
-      <div className="p-4 max-w-2xl mx-auto space-y-6">
-
-        {syncError && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-2xl px-4 py-3 flex items-start gap-3">
-            <span className="text-lg leading-none">⚠️</span>
-            <div className="flex-1">
-              <p className="text-red-400 text-xs font-bold uppercase">Nicht gespeichert</p>
-              <p className="text-slate-400 text-[11px] mt-0.5">Dein Spielstand konnte nicht synchronisiert werden. Die anderen sehen deine Eingabe evtl. nicht.</p>
-            </div>
-            <button onClick={() => setSyncError(null)} className="text-slate-500 text-xs font-bold hover:text-slate-300">✕</button>
-          </div>
-        )}
-
-        {/* Header */}
-        <header className="flex justify-between items-end">
-          <div>
-            <p className="text-[10px] text-slate-500 font-bold uppercase">Spieler</p>
-            <h1 className="text-2xl font-bungee text-amber-500 flex items-center gap-2">
-              {myPlayer?.name ?? '...'}
-              <button
-                onClick={() => {
-                  const keys = Object.keys(DRINK_THEMES) as DrinkType[];
-                  setMyDrink(keys[(keys.indexOf(myDrink) + 1) % keys.length]);
-                }}
-                title={`Getränk: ${DRINK_THEMES[myDrink].label} (tippen zum Wechseln)`}
-                className="text-lg leading-none"
-              >{DRINK_THEMES[myDrink].emoji}</button>
-            </h1>
-          </div>
-          <div className="flex items-center gap-4 text-right">
-            <div className="text-xs font-bold text-slate-500 uppercase">Code: {game.gameCode}</div>
-            {isCreator && game.status !== GameStatus.SETUP && game.status !== GameStatus.FINISHED && (
-              <button onClick={goBack} className="text-slate-400 font-bold text-[10px] uppercase">← Zurück</button>
-            )}
-            {isCreator ? (
-              <button onClick={() => { if (window.confirm("Spiel wirklich beenden?")) updateGame(() => null); }} className="text-red-500 font-bold text-[10px] uppercase underline">Beenden</button>
-            ) : (
-              <button onClick={() => { setGame(null); setMyPlayerId(null); localStorage.removeItem('bierwiegen_last_session'); localStorage.removeItem('bierwiegen_player_id'); }} className="text-slate-500 font-bold text-[10px] uppercase">Verlassen</button>
-            )}
-          </div>
-        </header>
-
-        {/* My player card */}
+  // ─── Dashboard-Seiten ──────────────────────────────────────────────────
+  const myCardContent = (
+    <>
         {myPlayer && (
           <Card className="border-amber-500/30">
             {(() => {
@@ -999,6 +963,11 @@ VITE_SUPABASE_ANON_KEY=...</pre>
           </Card>
         )}
 
+    </>
+  );
+
+  const taskContent = (
+    <>
         {/* ─── WEIGHING_INITIAL ──────────────────────────────────────────────── */}
         {/* ─── SETUP (Spieler bereits gewählt) ───────────────────────────────── */}
         {game.status === GameStatus.SETUP && (
@@ -1021,13 +990,6 @@ VITE_SUPABASE_ANON_KEY=...</pre>
               ))}
             </div>
             {isCreator && (
-              <Button
-                onClick={() => updateGameFresh(p => p ? { ...p, status: GameStatus.WEIGHING_INITIAL } : null)}
-                disabled={game.players.length < 1}
-                className="w-full py-4 text-xl font-bungee"
-              >START</Button>
-            )}
-            {isCreator && (
               <button
                 onClick={() => { const url = new URL(window.location.href); url.searchParams.set('code', game.gameCode); navigator.clipboard.writeText(url.toString()); setCopyFeedback(true); setTimeout(() => setCopyFeedback(false), 2000); }}
                 className={`w-full mt-3 text-[10px] font-bold uppercase py-2 rounded-lg border transition-colors ${copyFeedback ? 'text-green-500 border-green-500/30' : 'text-slate-400 border-slate-700'}`}
@@ -1048,7 +1010,7 @@ VITE_SUPABASE_ANON_KEY=...</pre>
               return (
                 <Card>
                   <h2 className="text-xl font-bungee text-center mb-6 uppercase">Initialwiegen</h2>
-                  <div className="space-y-3 mb-6">
+                  <div className="space-y-3">
                     {game.players.map(p => (
                       <div key={p.id} className="flex items-center justify-between p-3 bg-slate-900/40 rounded-xl">
                         <div className="font-bold">{p.name}</div>
@@ -1070,25 +1032,6 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                       </div>
                     ))}
                   </div>
-                  <Button
-                    onClick={() => {
-                      if (!game.players.every(p => inputs[p.id] && parseInt(inputs[p.id]) >= 1 && parseInt(inputs[p.id]) <= maxW)) {
-                        alert(`Bitte gültige Gewichte eingeben (1–${maxW}g)`);
-                        return;
-                      }
-                      updateGame(prev => {
-                        if (!prev) return null;
-                        return {
-                          ...prev,
-                          status: GameStatus.SETTING_TARGET,
-                          players: prev.players.map(p => ({ ...p, weights: [parseInt(inputs[p.id])] })),
-                          pendingInitialWeights: {},
-                        };
-                      });
-                      setInputs({});
-                    }}
-                    className="w-full py-4 font-bungee"
-                  >FERTIG</Button>
                 </Card>
               );
             }
@@ -1137,16 +1080,6 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                       <span className="absolute right-3 text-slate-400 font-bungee text-2xl pointer-events-none">G</span>
                     </div>
                   </div>
-                  <Button
-                    onClick={() => {
-                      if (!myPlayerId) return;
-                      const val = parseInt(weightInput);
-                      if (!val || val < 1 || val > maxW) { alert(`Bitte gültiges Gewicht eingeben (1–${maxW}g)`); return; }
-                      updateGame(prev => prev ? { ...prev, pendingInitialWeights: { ...(prev.pendingInitialWeights ?? {}), [myPlayerId]: val } } : null);
-                      setWeightInput('');
-                    }}
-                    className="w-full py-4 font-bungee"
-                  >EINWIEGEN</Button>
                 </div>
               )}
               <div className="mt-4 space-y-1">
@@ -1197,6 +1130,8 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                     max={100}
                     value={drinkAmountInput || DEFAULT_DRINK_AMOUNT}
                     onChange={(e) => setDrinkAmountInput(e.target.value)}
+                    // Waagrechtes Ziehen gehört dem Slider, nicht dem Seiten-Wischen.
+                    style={{ touchAction: 'pan-y' }}
                     className="w-full accent-amber-500"
                   />
                   <div className="flex justify-between text-xs text-slate-500 font-bold mt-1">
@@ -1204,32 +1139,6 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                     <span>100g</span>
                   </div>
                 </div>
-                <Button
-                  onClick={() => {
-                    // Ohne Antippen eines Presets stand hier NaN und der Knopf tat
-                    // stillschweigend nichts – obwohl die Karte 30g anzeigt.
-                    const parsed = parseInt(drinkAmountInput);
-                    const amount = Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_DRINK_AMOUNT;
-                    updateGame(prev => {
-                      if (!prev) return null;
-                      const currentMin = minLastWeight(prev.players);
-                      if (currentMin === null) return prev;
-                      return {
-                        ...prev,
-                        status: GameStatus.DRINKING,
-                        rounds: [...prev.rounds, {
-                          roundNumber: prev.rounds.length + 1,
-                          targetWeight: currentMin - amount,
-                          chooserPlayerId: myPlayerId ?? '',
-                          initialWeights: {},
-                          finalWeights: {},
-                        }],
-                      };
-                    });
-                    setDrinkAmountInput('');
-                  }}
-                  className="w-full py-4 font-bungee"
-                >RUNDE STARTEN</Button>
               </div>
             </Card>
           ) : (
@@ -1252,16 +1161,12 @@ VITE_SUPABASE_ANON_KEY=...</pre>
             <Card className="border-amber-500/50 text-center py-10">
               <h2 className="text-xs font-bold text-amber-500 uppercase mb-2">Ziel</h2>
               <div className="text-6xl font-bungee text-white mb-2">{currentRound?.targetWeight}g</div>
-              <div className="bg-slate-900 rounded-xl px-4 py-3 mb-6 inline-block">
+              <div className="bg-slate-900 rounded-xl px-4 py-3 inline-block">
                 <span className="text-[10px] font-bold text-slate-500 uppercase">Trink</span>
                 <div className="text-2xl font-bungee text-amber-400">{myDrinkAmount}g</div>
               </div>
-              {game.mode === 'host' ? (
-                isCreator
-                  ? <Button onClick={() => updateGame(p => p ? { ...p, status: GameStatus.WEIGHING_FINAL } : null)} className="w-full py-4 font-bungee">WIEGEN</Button>
-                  : <p className="text-slate-500 text-xs font-bold uppercase mt-4">Host startet das Wiegen...</p>
-              ) : (
-                <Button onClick={() => updateGame(p => p ? { ...p, status: GameStatus.WEIGHING_FINAL } : null)} className="w-full py-4 font-bungee">WIEGEN</Button>
+              {game.mode === 'host' && !isCreator && (
+                <p className="text-slate-500 text-xs font-bold uppercase mt-6">Host startet das Wiegen...</p>
               )}
             </Card>
           );
@@ -1280,7 +1185,7 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                     <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Ziel</p>
                     <div className="text-4xl font-bungee text-amber-500">{currentRound?.targetWeight}g</div>
                   </div>
-                  <div className="space-y-3 mb-6">
+                  <div className="space-y-3">
                     {game.players.map(p => {
                       const maxForP = p.weights[0] || maxW;
                       return (
@@ -1305,31 +1210,6 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                       );
                     })}
                   </div>
-                  <Button
-                    onClick={() => {
-                      const invalid = game.players.find(p => {
-                        const val = parseInt(inputs[p.id]);
-                        const maxForP = p.weights[0] || maxW;
-                        return !inputs[p.id] || isNaN(val) || val < 0 || val > maxForP;
-                      });
-                      if (invalid) { alert(`Ungültiger Wert für ${invalid.name}`); return; }
-                      updateGame(prev => {
-                        if (!prev) return null;
-                        const target = prev.rounds.slice(-1)[0].targetWeight;
-                        return {
-                          ...prev,
-                          status: GameStatus.ROUND_RESULT,
-                          players: prev.players.map(p => ({
-                            ...p,
-                            weights: [...p.weights, parseInt(inputs[p.id])],
-                            deviations: [...p.deviations, Math.abs(parseInt(inputs[p.id]) - target)],
-                          })),
-                        };
-                      });
-                      setInputs({});
-                    }}
-                    className="w-full py-4 font-bungee"
-                  >AUSWERTEN</Button>
                 </Card>
               );
             }
@@ -1385,22 +1265,6 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                       <span className="absolute right-3 text-slate-400 font-bungee text-2xl pointer-events-none">G</span>
                     </div>
                   </div>
-                  <Button
-                    onClick={() => {
-                      if (!myPlayerId || !currentRound) return;
-                      const val = parseInt(weightInput);
-                      if (isNaN(val) || val < 0 || val > maxForMe) { alert(`Ungültiger Wert. Max: ${maxForMe}g`); return; }
-                      updateGame(prev => {
-                        if (!prev) return null;
-                        const rounds = [...prev.rounds];
-                        const lastIdx = rounds.length - 1;
-                        rounds[lastIdx] = { ...rounds[lastIdx], finalWeights: { ...rounds[lastIdx].finalWeights, [myPlayerId]: val } };
-                        return { ...prev, rounds };
-                      });
-                      setWeightInput('');
-                    }}
-                    className="w-full py-4 font-bungee"
-                  >EINWIEGEN</Button>
                   <p className="text-center text-slate-500 text-xs font-bold uppercase">
                     {submittedCount}/{game.players.length} eingereicht
                   </p>
@@ -1493,39 +1357,6 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                 </Card>
               )}
 
-              <PlacementCard
-                onSelect={isCreator ? askRemove : undefined}
-                selectableIds={game.players.filter(canRemove).map(p => p.id)}
-                players={(() => {
-                  const sorted = [...game.players].sort((a, b) => calculateAverageDeviation(a.deviations) - calculateAverageDeviation(b.deviations));
-                  const prevSorted = [...game.players].sort((a, b) => calculateAverageDeviation(a.deviations.slice(0, -1)) - calculateAverageDeviation(b.deviations.slice(0, -1)));
-                  const prevRank: Record<string, number> = Object.fromEntries(prevSorted.map((p, i) => [p.id, i]));
-                  return sorted.map((p, currIdx) => ({
-                    id: p.id,
-                    name: p.name,
-                    averageDeviation: calculateAverageDeviation(p.deviations),
-                    penalties: p.penalties,
-                    penaltiesGiven: getPenaltiesGiven(p.id, game.players, game.rounds),
-                    rankChange: p.deviations.length > 1 ? prevRank[p.id] - currIdx : undefined,
-                  }));
-                })()}
-              />
-
-              <Button
-                onClick={() => {
-                  const currentMin = minLastWeight(game.players);
-                  const bottleCfg = BOTTLE_SIZES[game.bottleSize] ?? BOTTLE_SIZES['0.5'];
-                  const drunkPerPlayer = game.players
-                    .map(p => { const last = lastWeight(p); return last === null ? null : (p.weights[0] ?? last) - last; })
-                    .filter((d): d is number => d !== null);
-                  const maxDrunk = drunkPerPlayer.length ? Math.max(...drunkPerPlayer) : 0;
-                  const isFinished = currentMin !== null
-                    && (currentMin < bottleCfg.finishedThreshold || maxDrunk >= bottleCfg.liquidWeight);
-                  updateGame(p => p ? { ...p, status: isFinished ? GameStatus.FINISHED : GameStatus.SETTING_TARGET, currentRoundIndex: p.currentRoundIndex + 1 } : null);
-                }}
-                disabled={!penaltyTargetId}
-                className="w-full py-4 font-bungee"
-              >NÄCHSTE RUNDE</Button>
             </div>
           );
         })()}
@@ -1535,7 +1366,7 @@ VITE_SUPABASE_ANON_KEY=...</pre>
           <Card className="text-center py-10">
             <div className="text-6xl mb-4">🏆</div>
             <h2 className="text-3xl font-bungee text-amber-500 mb-8 uppercase">Finale</h2>
-            <div className="space-y-2 mb-8">
+            <div className="space-y-2">
               {[...game.players].sort((a, b) => calculateAverageDeviation(a.deviations) - calculateAverageDeviation(b.deviations)).map((p, idx) => (
                 <div key={p.id} className={`p-4 rounded-xl border flex items-center justify-between ${p.id === myPlayerId ? 'border-amber-500/30 bg-amber-500/5' : 'border-slate-800 bg-slate-900/60'}`}>
                   <div className="font-bungee text-slate-600">#{idx + 1}</div>
@@ -1544,10 +1375,14 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                 </div>
               ))}
             </div>
-            {isCreator && <Button onClick={() => updateGame(() => null)} className="w-full py-4 font-bungee">MENÜ</Button>}
           </Card>
         )}
 
+    </>
+  );
+
+  const rankingListContent = (
+    <>
         {/* ─── Ranking (always visible except result/finished/setup) ─────────── */}
         {game.status !== GameStatus.ROUND_RESULT && game.status !== GameStatus.FINISHED && game.status !== GameStatus.SETUP && (
           <Card>
@@ -1598,11 +1433,306 @@ VITE_SUPABASE_ANON_KEY=...</pre>
           </Card>
         )}
 
+    </>
+  );
+
+  // Hauptaktion der Phase: sitzt fest im Dock unter den Seiten, damit sie von
+  // jeder Seite aus erreichbar ist. Braucht sie eine Eingabe von der
+  // Aufgaben-Seite, springt der erste Tipp von woanders erst dorthin.
+  type DockAction = { label: string; onClick: () => void; disabled?: boolean; variant?: 'primary' | 'secondary'; needsTaskPage?: boolean };
+  const bottleMax = (BOTTLE_SIZES[game.bottleSize] ?? BOTTLE_SIZES['0.5']).maxWeight;
+
+  const submitInitialHost = () => {
+    if (!game.players.every(p => inputs[p.id] && parseInt(inputs[p.id]) >= 1 && parseInt(inputs[p.id]) <= bottleMax)) {
+      alert(`Bitte gültige Gewichte eingeben (1–${bottleMax}g)`);
+      return;
+    }
+    updateGame(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        status: GameStatus.SETTING_TARGET,
+        players: prev.players.map(p => ({ ...p, weights: [parseInt(inputs[p.id])] })),
+        pendingInitialWeights: {},
+      };
+    });
+    setInputs({});
+  };
+
+  const submitInitialPeer = () => {
+    if (!myPlayerId) return;
+    const val = parseInt(weightInput);
+    if (!val || val < 1 || val > bottleMax) { alert(`Bitte gültiges Gewicht eingeben (1–${bottleMax}g)`); return; }
+    updateGame(prev => prev ? { ...prev, pendingInitialWeights: { ...(prev.pendingInitialWeights ?? {}), [myPlayerId]: val } } : null);
+    setWeightInput('');
+  };
+
+  const startRound = () => {
+    // Ohne Antippen eines Presets stand hier NaN und der Knopf tat
+    // stillschweigend nichts – obwohl die Karte 30g anzeigt.
+    const parsed = parseInt(drinkAmountInput);
+    const amount = Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_DRINK_AMOUNT;
+    updateGame(prev => {
+      if (!prev) return null;
+      const currentMin = minLastWeight(prev.players);
+      if (currentMin === null) return prev;
+      return {
+        ...prev,
+        status: GameStatus.DRINKING,
+        rounds: [...prev.rounds, {
+          roundNumber: prev.rounds.length + 1,
+          targetWeight: currentMin - amount,
+          chooserPlayerId: myPlayerId ?? '',
+          initialWeights: {},
+          finalWeights: {},
+        }],
+      };
+    });
+    setDrinkAmountInput('');
+  };
+
+  const submitFinalHost = () => {
+    const invalid = game.players.find(p => {
+      const val = parseInt(inputs[p.id]);
+      const maxForP = p.weights[0] || bottleMax;
+      return !inputs[p.id] || isNaN(val) || val < 0 || val > maxForP;
+    });
+    if (invalid) { alert(`Ungültiger Wert für ${invalid.name}`); return; }
+    updateGame(prev => {
+      if (!prev) return null;
+      const target = prev.rounds.slice(-1)[0].targetWeight;
+      return {
+        ...prev,
+        status: GameStatus.ROUND_RESULT,
+        players: prev.players.map(p => ({
+          ...p,
+          weights: [...p.weights, parseInt(inputs[p.id])],
+          deviations: [...p.deviations, Math.abs(parseInt(inputs[p.id]) - target)],
+        })),
+      };
+    });
+    setInputs({});
+  };
+
+  const submitFinalPeer = () => {
+    if (!myPlayerId || !currentRound) return;
+    const maxForMe = myPlayer?.weights[0] ?? bottleMax;
+    const val = parseInt(weightInput);
+    if (isNaN(val) || val < 0 || val > maxForMe) { alert(`Ungültiger Wert. Max: ${maxForMe}g`); return; }
+    updateGame(prev => {
+      if (!prev) return null;
+      const rounds = [...prev.rounds];
+      const lastIdx = rounds.length - 1;
+      rounds[lastIdx] = { ...rounds[lastIdx], finalWeights: { ...rounds[lastIdx].finalWeights, [myPlayerId]: val } };
+      return { ...prev, rounds };
+    });
+    setWeightInput('');
+  };
+
+  const nextRound = () => {
+    const currentMin = minLastWeight(game.players);
+    const bottleCfg = BOTTLE_SIZES[game.bottleSize] ?? BOTTLE_SIZES['0.5'];
+    const drunkPerPlayer = game.players
+      .map(p => { const last = lastWeight(p); return last === null ? null : (p.weights[0] ?? last) - last; })
+      .filter((d): d is number => d !== null);
+    const maxDrunk = drunkPerPlayer.length ? Math.max(...drunkPerPlayer) : 0;
+    const isFinished = currentMin !== null
+      && (currentMin < bottleCfg.finishedThreshold || maxDrunk >= bottleCfg.liquidWeight);
+    updateGame(p => p ? { ...p, status: isFinished ? GameStatus.FINISHED : GameStatus.SETTING_TARGET, currentRoundIndex: p.currentRoundIndex + 1 } : null);
+  };
+
+  const dockAction: DockAction | null = (() => {
+    switch (game.status) {
+      case GameStatus.SETUP:
+        return isCreator
+          ? { label: 'START', disabled: game.players.length < 1, onClick: () => updateGameFresh(p => p ? { ...p, status: GameStatus.WEIGHING_INITIAL } : null) }
+          : null;
+      case GameStatus.WEIGHING_INITIAL:
+        if (game.mode === 'host') return isCreator ? { label: 'FERTIG', needsTaskPage: true, onClick: submitInitialHost } : null;
+        if (!myPlayerId || (game.pendingInitialWeights ?? {})[myPlayerId] !== undefined) return null;
+        return { label: 'EINWIEGEN', needsTaskPage: true, onClick: submitInitialPeer };
+      case GameStatus.SETTING_TARGET:
+        if (chooserIsMe || (game.mode === 'host' && isCreator)) return { label: 'RUNDE STARTEN', needsTaskPage: true, onClick: startRound };
+        if (game.mode !== 'host' && minWeightPlayer && minWeightPlayer.id !== myPlayerId) {
+          const chooser = minWeightPlayer;
+          const cooling = pingCoolingDown(chooser.id);
+          return { label: cooling ? '✓ Angepingt' : `📣 ${chooser.name} anpingen`, variant: 'secondary', disabled: cooling, onClick: () => sendPing(chooser) };
+        }
+        return null;
+      case GameStatus.DRINKING:
+        if (game.mode === 'host' && !isCreator) return null;
+        return { label: 'WIEGEN', onClick: () => updateGame(p => p ? { ...p, status: GameStatus.WEIGHING_FINAL } : null) };
+      case GameStatus.WEIGHING_FINAL:
+        if (game.mode === 'host') return isCreator ? { label: 'AUSWERTEN', needsTaskPage: true, onClick: submitFinalHost } : null;
+        if (!myPlayerId || !currentRound || currentRound.finalWeights[myPlayerId] !== undefined) return null;
+        return { label: 'EINWIEGEN', needsTaskPage: true, onClick: submitFinalPeer };
+      case GameStatus.ROUND_RESULT:
+        return { label: 'NÄCHSTE RUNDE', disabled: !penaltyTargetId, onClick: nextRound };
+      case GameStatus.FINISHED:
+        return isCreator ? { label: 'MENÜ', onClick: () => updateGame(() => null) } : null;
+      default:
+        return null;
+    }
+  })();
+
+  const placementContent = (
+    <PlacementCard
+      title="Gesamtwertung"
+      onSelect={isCreator ? askRemove : undefined}
+      selectableIds={game.players.filter(canRemove).map(p => p.id)}
+      players={(() => {
+        const sorted = [...game.players].sort((a, b) => calculateAverageDeviation(a.deviations) - calculateAverageDeviation(b.deviations));
+        const prevSorted = [...game.players].sort((a, b) => calculateAverageDeviation(a.deviations.slice(0, -1)) - calculateAverageDeviation(b.deviations.slice(0, -1)));
+        const prevRank: Record<string, number> = Object.fromEntries(prevSorted.map((p, i) => [p.id, i]));
+        return sorted.map((p, currIdx) => ({
+          id: p.id,
+          name: p.name,
+          averageDeviation: calculateAverageDeviation(p.deviations),
+          penalties: p.penalties,
+          penaltiesGiven: getPenaltiesGiven(p.id, game.players, game.rounds),
+          rankChange: p.deviations.length > 1 ? prevRank[p.id] - currIdx : undefined,
+        }));
+      })()}
+    />
+  );
+
+  // Rundenübersicht für die "Ich"-Seite: Ziel, eigene Abweichung, Sieger.
+  const myRounds = myPlayer ? game.rounds.slice(0, myPlayer.deviations.length) : [];
+  const roundsTable = myPlayer && myRounds.length > 0 && (
+    <Card>
+      <h2 className="text-xs font-bold text-slate-500 uppercase mb-3">Runden im Detail</h2>
+      <table className="w-full text-sm tabular-nums">
+        <thead>
+          <tr className="text-[10px] font-bold text-slate-500 uppercase">
+            <th className="text-left pb-2">Runde</th>
+            <th className="text-right pb-2">Ziel</th>
+            <th className="text-right pb-2">Du</th>
+            <th className="text-right pb-2">Sieger</th>
+          </tr>
+        </thead>
+        <tbody>
+          {myRounds.map((r, i) => {
+            const withDev = game.players.filter(p => p.deviations[i] !== undefined);
+            const best = withDev.length ? Math.min(...withDev.map(p => p.deviations[i])) : null;
+            const winners = withDev.filter(p => p.deviations[i] === best).map(p => p.name).join(', ');
+            return (
+              <tr key={i} className="border-t border-slate-800">
+                <td className="py-2 font-bold text-slate-400">R{i + 1}</td>
+                <td className="py-2 text-right">{r.targetWeight} g</td>
+                <td className={`py-2 text-right font-bold ${myPlayer.deviations[i] === best ? 'text-amber-400' : 'text-white'}`}>{myPlayer.deviations[i]} g</td>
+                <td className="py-2 text-right text-slate-300">{winners}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </Card>
+  );
+
+  const taskLabel: Record<GameStatus, string> = {
+    [GameStatus.SETUP]: 'Lobby',
+    [GameStatus.WEIGHING_INITIAL]: 'Wiegen',
+    [GameStatus.SETTING_TARGET]: 'Ziel',
+    [GameStatus.DRINKING]: 'Trinken',
+    [GameStatus.WEIGHING_FINAL]: 'Wiegen',
+    [GameStatus.ROUND_RESULT]: 'Ergebnis',
+    [GameStatus.FINISHED]: 'Finale',
+  };
+  // Punkt am Aufgaben-Tab: du bist gefragt. Zahl am Ranking: auf so viele wird gewartet.
+  const iNeedToAct = !!myWaiting || (!!dockAction && dockAction.variant !== 'secondary' && !dockAction.disabled);
+  // In der Ergebnis-Phase wartet man auf die Strafe – die steht auf der Ergebnis-Seite, nicht in der Gesamtwertung.
+  const waitingCount = game.status === GameStatus.ROUND_RESULT ? 0
+    : game.players.filter(p => p.id !== myPlayerId && waitingOn(p)).length;
+
+  const taskPage: SwipePage = { key: 'task', label: taskLabel[game.status], badge: iNeedToAct ? <DotBadge /> : undefined, content: taskContent };
+  const mePage: SwipePage = { key: 'me', label: 'Ich', content: <>{myCardContent}{roundsTable}</> };
+  const dashboardPages: SwipePage[] =
+    game.status === GameStatus.SETUP ? [taskPage]
+    : game.status === GameStatus.FINISHED ? [taskPage, mePage]
+    : [
+      taskPage,
+      {
+        key: 'ranking',
+        label: game.status === GameStatus.ROUND_RESULT ? 'Gesamt' : 'Ranking',
+        badge: waitingCount > 0 ? <CountBadge count={waitingCount} /> : undefined,
+        content: game.status === GameStatus.ROUND_RESULT ? placementContent : rankingListContent,
+      },
+      mePage,
+    ];
+  const currentPage = Math.min(activePage, dashboardPages.length - 1);
+
+  return (
+    <div className="h-[100dvh] flex flex-col">
+      <div className="flex-1 min-h-0 w-full max-w-2xl mx-auto flex flex-col">
+        <div className="flex-none px-4 pt-4 pb-3 space-y-3">
+
+        {syncError && (
+          <div className="bg-red-500/10 border border-red-500/30 rounded-2xl px-4 py-3 flex items-start gap-3">
+            <span className="text-lg leading-none">⚠️</span>
+            <div className="flex-1">
+              <p className="text-red-400 text-xs font-bold uppercase">Nicht gespeichert</p>
+              <p className="text-slate-400 text-[11px] mt-0.5">Dein Spielstand konnte nicht synchronisiert werden. Die anderen sehen deine Eingabe evtl. nicht.</p>
+            </div>
+            <button onClick={() => setSyncError(null)} className="text-slate-500 text-xs font-bold hover:text-slate-300">✕</button>
+          </div>
+        )}
+
+        {/* Header */}
+        <header className="flex justify-between items-end">
+          <div>
+            <p className="text-[10px] text-slate-500 font-bold uppercase">Spieler</p>
+            <h1 className="text-2xl font-bungee text-amber-500 flex items-center gap-2">
+              {myPlayer?.name ?? '...'}
+              <button
+                onClick={() => {
+                  const keys = Object.keys(DRINK_THEMES) as DrinkType[];
+                  setMyDrink(keys[(keys.indexOf(myDrink) + 1) % keys.length]);
+                }}
+                title={`Getränk: ${DRINK_THEMES[myDrink].label} (tippen zum Wechseln)`}
+                className="text-lg leading-none"
+              >{DRINK_THEMES[myDrink].emoji}</button>
+              <span className="relative">
+                {recentReactions(reactions)
+                  .filter(r => r.targetPlayerId === myPlayerId)
+                  .map(r => <FloatingReaction key={r.id} emoji={r.emoji} />)}
+              </span>
+            </h1>
+          </div>
+          <div className="flex items-center gap-4 text-right">
+            <div className="text-xs font-bold text-slate-500 uppercase">Code: {game.gameCode}</div>
+            {isCreator && game.status !== GameStatus.SETUP && game.status !== GameStatus.FINISHED && (
+              <button onClick={goBack} className="text-slate-400 font-bold text-[10px] uppercase">← Zurück</button>
+            )}
+            {isCreator ? (
+              <button onClick={() => { if (window.confirm("Spiel wirklich beenden?")) updateGame(() => null); }} className="text-red-500 font-bold text-[10px] uppercase underline">Beenden</button>
+            ) : (
+              <button onClick={() => { setGame(null); setMyPlayerId(null); localStorage.removeItem('bierwiegen_last_session'); localStorage.removeItem('bierwiegen_player_id'); }} className="text-slate-500 font-bold text-[10px] uppercase">Verlassen</button>
+            )}
+          </div>
+        </header>
+
+        </div>
+
+        <SwipeTabs pages={dashboardPages} active={currentPage} onActiveChange={setActivePage} />
+
+        {dockAction && (
+          <div className="flex-none px-4 pt-3 pb-4 border-t border-slate-800 bg-slate-900">
+            <Button
+              variant={dockAction.variant ?? 'primary'}
+              disabled={dockAction.disabled}
+              onClick={() => {
+                if (dockAction.needsTaskPage && currentPage !== 0) { setActivePage(0); return; }
+                dockAction.onClick();
+              }}
+              className="w-full py-4 font-bungee"
+            >{dockAction.label}</Button>
+          </div>
+        )}
       </div>
 
       {/* ─── DEV PANEL ─────────────────────────────────────────────── */}
       {devMode && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 bg-slate-950/95 border-t border-amber-500/30 backdrop-blur-sm px-3 py-2 flex items-center gap-2 flex-wrap">
+        <div className="flex-none relative z-50 bg-slate-950/95 border-t border-amber-500/30 backdrop-blur-sm px-3 py-2 flex items-center gap-2 flex-wrap">
           <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest shrink-0">⚙ DEV</span>
           <div className="w-px h-4 bg-slate-700 shrink-0" />
           <div className="flex gap-1 flex-wrap flex-1">

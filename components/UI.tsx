@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 export const Card: React.FC<{ children: React.ReactNode, className?: string }> = ({ children, className = '' }) => (
   <div className={`bg-slate-800/50 backdrop-blur-md border border-slate-700 rounded-3xl p-6 shadow-xl ${className}`}>
@@ -157,4 +157,104 @@ export const Input: React.FC<{
       className="bg-slate-900/50 border border-slate-700 rounded-2xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all text-white placeholder:text-slate-600"
     />
   </div>
+);
+
+export interface SwipePage {
+  key: string;
+  label: string;
+  /** Kleiner Hinweis im Tab, z. B. Punkt (du bist dran) oder Zahl (auf so viele wird gewartet). */
+  badge?: React.ReactNode;
+  content: React.ReactNode;
+}
+
+/**
+ * Beschriftete Tabs oben + seitlich wischbare Seiten darunter.
+ * Das Wischen läuft über natives CSS-Scroll-Snapping; die Tabs folgen der
+ * Scrollposition, ein Tipp auf einen Tab scrollt zur Seite.
+ * Jede Seite scrollt vertikal für sich.
+ */
+export const SwipeTabs: React.FC<{
+  pages: SwipePage[];
+  active: number;
+  onActiveChange: (index: number) => void;
+}> = ({ pages, active, onActiveChange }) => {
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const [progress, setProgress] = useState(active);
+  // Index-Wechsel, die aus dem Wischen selbst kommen, dürfen nicht zurück-
+  // scrollen – sonst kämpft der Code mitten in der Geste gegen den Finger.
+  const fromScroll = useRef(false);
+
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    if (fromScroll.current) { fromScroll.current = false; return; }
+    const target = active * el.clientWidth;
+    if (Math.abs(el.scrollLeft - target) > 1) {
+      const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      el.scrollTo({ left: target, behavior: smooth ? 'smooth' : 'auto' });
+    }
+  }, [active, pages.length]);
+
+  const handleScroll = () => {
+    const el = scrollerRef.current;
+    if (!el || !el.clientWidth) return;
+    const p = el.scrollLeft / el.clientWidth;
+    setProgress(p);
+    const idx = Math.min(pages.length - 1, Math.max(0, Math.round(p)));
+    if (idx !== active) { fromScroll.current = true; onActiveChange(idx); }
+  };
+
+  const showTabs = pages.length > 1;
+  return (
+    <div className="flex-1 min-h-0 flex flex-col">
+      {showTabs && (
+        <div role="tablist" className="flex-none relative mx-4 mb-3 grid bg-slate-950 border border-slate-800 rounded-2xl p-1" style={{ gridTemplateColumns: `repeat(${pages.length}, 1fr)` }}>
+          <span
+            aria-hidden="true"
+            className="absolute top-1 bottom-1 left-1 rounded-xl bg-slate-800 border border-slate-700"
+            style={{ width: `calc((100% - 0.5rem) / ${pages.length})`, transform: `translateX(${progress * 100}%)` }}
+          />
+          {pages.map((p, i) => (
+            <button
+              key={p.key}
+              type="button"
+              role="tab"
+              aria-selected={i === active}
+              onClick={() => onActiveChange(i)}
+              className={`relative py-2 px-1 flex items-center justify-center gap-1.5 text-[11px] font-bold uppercase tracking-wide transition-colors ${i === active ? 'text-white' : 'text-slate-500'}`}
+            >
+              {p.label}
+              {p.badge}
+            </button>
+          ))}
+        </div>
+      )}
+      <div
+        ref={scrollerRef}
+        onScroll={handleScroll}
+        className="no-scrollbar flex-1 min-h-0 flex overflow-x-auto overflow-y-hidden snap-x snap-mandatory overscroll-x-contain"
+      >
+        {pages.map((p, i) => (
+          <section
+            key={p.key}
+            role={showTabs ? 'tabpanel' : undefined}
+            aria-label={p.label}
+            className="no-scrollbar w-full flex-none snap-start snap-always overflow-y-auto px-4 pb-6 space-y-4"
+          >
+            {p.content}
+          </section>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+/** Punkt im Tab: hier wird gerade etwas von dir gebraucht. */
+export const DotBadge: React.FC = () => (
+  <span aria-label="Du bist dran" className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+);
+
+/** Zahl im Tab: auf so viele Spieler wird gerade gewartet. */
+export const CountBadge: React.FC<{ count: number }> = ({ count }) => (
+  <span aria-label={`${count} fehlen noch`} className="min-w-4 h-4 px-1 rounded-full bg-yellow-300 text-slate-900 text-[9px] font-extrabold inline-flex items-center justify-center">{count}</span>
 );
