@@ -40,9 +40,21 @@ export interface Round {
   initialWeights: Record<string, number>;
   finalWeights: Record<string, number>;
   penaltyTargetId?: string;
+  /** Spieler, die beim Endwiegen dieser Runde "Fast leer" gemeldet haben. */
+  almostEmpty?: Record<string, boolean>;
+  /** Diese Runde war als letzte angekündigt – danach kommt das Finale. */
+  isLastRound?: boolean;
+  /** Host hat die geschätzte "Letzte Runde" nach dieser Runde weggedrückt. */
+  continueDespiteEstimate?: boolean;
 }
 
-export type BottleSize = '0.33' | '0.5' | '1.0';
+/**
+ * Füllmenge in Litern als Text. '0.33' | '0.5' | '1.0' sind die Voreinstellungen,
+ * jeder andere Wert (z. B. '0.3') ist eine eigene Füllmenge. So passt sie weiter
+ * in die bestehende Spalte bottle_size.
+ */
+export type BottleSize = string;
+export type PresetBottleSize = '0.33' | '0.5' | '1.0';
 export type DrinkType = 'beer' | 'water' | 'cola';
 
 export interface Game {

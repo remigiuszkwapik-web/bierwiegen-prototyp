@@ -2,10 +2,10 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Lottie from 'lottie-react';
 import cheersAnimation from './src/assets/cheers.json';
-import { Game, GameStatus, Player, Round, Reaction, Ping, BottleSize, DrinkType } from './types';
+import { Game, GameStatus, Player, Round, Reaction, Ping, PresetBottleSize, DrinkType } from './types';
 import { SupabaseGameRepository, isSupabaseConfigured } from './repositories/GameRepository';
 import { Card, Button, Input, BeerProgressBar, FloatingReaction, EmojiBar, PlacementCard } from './components/UI';
-import { BOTTLE_SIZES, DRINK_THEMES, DRINK_STORAGE_KEY, applyDrinkTheme } from './constants';
+import { BOTTLE_SIZES, DRINK_THEMES, DRINK_STORAGE_KEY, applyDrinkTheme, MIN_DRINK_AMOUNT, CUSTOM_VOLUME_MIN, CUSTOM_VOLUME_MAX } from './constants';
 import {
   calculateAverageDeviation,
   getPlayerPerformanceTag,
@@ -13,7 +13,11 @@ import {
   generateGameCode,
   getPenaltiesGiven,
   getRoundWins,
-  getDeviationTrend
+  getDeviationTrend,
+  getLastRoundReason,
+  getLiquidWeight,
+  getMaxWeight,
+  isPresetBottleSize,
 } from './services/GameLogic';
 
 const repo = new SupabaseGameRepository();
@@ -22,7 +26,7 @@ const repo = new SupabaseGameRepository();
 const createId = () => Math.random().toString(36).slice(2, 11);
 
 /** Voreingestellte Trinkmenge – muss zur Anzeige und zum Slider passen. */
-const DEFAULT_DRINK_AMOUNT = 30;
+const DEFAULT_DRINK_AMOUNT = MIN_DRINK_AMOUNT;
 
 /** Reaktionen sind fluechtig: aelteres wird weder gezeigt noch gespeichert. */
 const REACTION_TTL_MS = 4000;
@@ -106,6 +110,11 @@ const App: React.FC = () => {
   const [weightInput, setWeightInput] = useState<string>('');
   const [drinkAmountInput, setDrinkAmountInput] = useState<string>('');
   const [inputs, setInputs] = useState<Record<string, string>>({});
+  // "Fast leer" beim Endwiegen: eigener Schalter (Peer) bzw. pro Spieler (Host).
+  const [almostEmptyInput, setAlmostEmptyInput] = useState(false);
+  const [almostEmptyInputs, setAlmostEmptyInputs] = useState<Record<string, boolean>>({});
+  // Eigene Füllmenge in ml – null = Eingabefeld zu.
+  const [customVolumeInput, setCustomVolumeInput] = useState<string | null>(null);
   const [newGameMode, setNewGameMode] = useState<'host' | 'peer'>('peer');
   const [showCheers, setShowCheers] = useState(false);
   const [poppedBubbles, setPoppedBubbles] = useState<Set<number>>(new Set());
@@ -470,7 +479,7 @@ const App: React.FC = () => {
               penalties: p.id === penaltyTargetId ? p.penalties - 1 : p.penalties,
             })),
             rounds: prev.rounds.map((r, i) =>
-              i === prev.rounds.length - 1 ? { ...r, penaltyTargetId: undefined, finalWeights: {} } : r
+              i === prev.rounds.length - 1 ? { ...r, penaltyTargetId: undefined, finalWeights: {}, almostEmpty: {} } : r
             ),
           };
         }
@@ -694,16 +703,46 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                 </div>
               </div>
               <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Flaschengröße</p>
-                <div className="flex gap-2">
-                  {(Object.entries(BOTTLE_SIZES) as [BottleSize, typeof BOTTLE_SIZES[keyof typeof BOTTLE_SIZES]][]).map(([key, val]) => (
+                <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Füllmenge</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {(Object.entries(BOTTLE_SIZES) as [PresetBottleSize, typeof BOTTLE_SIZES[PresetBottleSize]][]).map(([key, val]) => (
                     <button
                       key={key}
-                      onClick={() => updateGameFresh(p => p ? { ...p, bottleSize: key } : null)}
-                      className={`flex-1 py-3 rounded-xl font-bungee border-2 transition-colors text-sm ${game.bottleSize === key ? 'bg-amber-500 border-amber-400 text-slate-900' : 'bg-slate-800 border-slate-700 text-white'}`}
+                      onClick={() => { setCustomVolumeInput(null); updateGameFresh(p => p ? { ...p, bottleSize: key } : null); }}
+                      className={`py-3 rounded-xl font-bungee border-2 transition-colors text-sm ${game.bottleSize === key && customVolumeInput === null ? 'bg-amber-500 border-amber-400 text-slate-900' : 'bg-slate-800 border-slate-700 text-white'}`}
                     >{val.label}</button>
                   ))}
+                  <button
+                    onClick={() => setCustomVolumeInput(isPresetBottleSize(game.bottleSize) ? '' : String(getLiquidWeight(game.bottleSize)))}
+                    className={`py-3 rounded-xl font-bungee border-2 transition-colors text-sm ${!isPresetBottleSize(game.bottleSize) || customVolumeInput !== null ? 'bg-amber-500 border-amber-400 text-slate-900' : 'bg-slate-800 border-slate-700 text-white'}`}
+                  >{isPresetBottleSize(game.bottleSize) ? 'Eigene' : `Eigene: ${getLiquidWeight(game.bottleSize)} ml`}</button>
                 </div>
+                {customVolumeInput !== null && (() => {
+                  const ml = parseInt(customVolumeInput);
+                  const valid = Number.isFinite(ml) && ml >= CUSTOM_VOLUME_MIN && ml <= CUSTOM_VOLUME_MAX;
+                  return (
+                    <div className="mt-3 flex items-center gap-2">
+                      <Input
+                        type="number"
+                        inputMode="numeric"
+                        value={customVolumeInput}
+                        onChange={(e) => setCustomVolumeInput(e.target.value)}
+                        placeholder="z. B. 300"
+                        className="flex-1 text-center font-bungee"
+                      />
+                      <span className="text-slate-500 text-xs font-bold uppercase">ml</span>
+                      <Button
+                        variant="secondary"
+                        disabled={!valid}
+                        onClick={() => {
+                          updateGameFresh(p => p ? { ...p, bottleSize: String(ml / 1000) } : null);
+                          setCustomVolumeInput(null);
+                        }}
+                      >OK</Button>
+                    </div>
+                  );
+                })()}
+                <p className="text-[10px] text-slate-600 mt-2">Wie viel ungefähr im Gefäß ist – daraus schätzt das Spiel, wann die letzte Runde kommt.</p>
               </div>
             </div>
           )}
@@ -839,6 +878,9 @@ VITE_SUPABASE_ANON_KEY=...</pre>
   const iAmRoundWinner = roundWinner?.id === myPlayerId;
   const currentRound = game.rounds.slice(-1)[0];
   const penaltyTargetId = currentRound?.penaltyTargetId;
+  // In SETTING_TARGET ist die letzte Runde die zuletzt gespielte.
+  const lastPlayedRound = currentRound;
+  const lastRoundReason = game.status === GameStatus.SETTING_TARGET ? getLastRoundReason(game) : null;
 
   // Host darf jeden außer sich selbst aus dem laufenden Spiel nehmen.
   const canRemove = (p: Player) => isCreator && p.id !== myPlayerId && game.status !== GameStatus.FINISHED;
@@ -1041,7 +1083,7 @@ VITE_SUPABASE_ANON_KEY=...</pre>
         )}
 
         {game.status === GameStatus.WEIGHING_INITIAL && (() => {
-          const maxW = (BOTTLE_SIZES[game.bottleSize] ?? BOTTLE_SIZES['0.5']).maxWeight;
+          const maxW = getMaxWeight(game.bottleSize);
 
           if (game.mode === 'host') {
             if (isCreator) {
@@ -1161,6 +1203,32 @@ VITE_SUPABASE_ANON_KEY=...</pre>
           );
         })()}
 
+        {/* ─── LETZTE RUNDE (Ankündigung vor dem Start) ─────────────────────── */}
+        {game.status === GameStatus.SETTING_TARGET && lastRoundReason && (
+          <Card className="border-amber-500 bg-amber-500/10 text-center">
+            <div className="text-2xl font-bungee text-amber-500 uppercase">{lastRoundReason === 'extra' ? 'Zusatzrunde' : 'Letzte Runde'}</div>
+            <p className="text-slate-300 text-xs font-bold mt-1">
+              {lastRoundReason === 'extra' && 'Danach geht es wieder ins Finale.'}
+              {lastRoundReason === 'player' && `${game.players.filter(p => lastPlayedRound?.almostEmpty?.[p.id]).map(p => p.name).join(', ')} ${game.players.filter(p => lastPlayedRound?.almostEmpty?.[p.id]).length === 1 ? 'ist' : 'sind'} fast leer – danach ist Finale.`}
+              {lastRoundReason === 'estimate' && 'Laut Waage reicht der Inhalt nur noch für eine Runde – danach ist Finale.'}
+            </p>
+            {lastRoundReason === 'estimate' && isCreator && (
+              <Button
+                variant="secondary"
+                onClick={() => updateGame(prev => {
+                  if (!prev || prev.rounds.length === 0) return prev;
+                  const lastIdx = prev.rounds.length - 1;
+                  return { ...prev, rounds: prev.rounds.map((r, i) => i === lastIdx ? { ...r, continueDespiteEstimate: true } : r) };
+                })}
+                className="w-full mt-4 font-bungee"
+              >WEITERSPIELEN</Button>
+            )}
+            {lastRoundReason === 'estimate' && isCreator && (
+              <p className="text-[10px] text-slate-500 mt-2">Nur eine Schätzung – wenn noch genug drin ist, einfach weiterspielen.</p>
+            )}
+          </Card>
+        )}
+
         {/* ─── SETTING_TARGET ────────────────────────────────────────────────── */}
         {game.status === GameStatus.SETTING_TARGET && (
           (chooserIsMe || (game.mode === 'host' && isCreator)) ? (
@@ -1223,6 +1291,7 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                           chooserPlayerId: myPlayerId ?? '',
                           initialWeights: {},
                           finalWeights: {},
+                          isLastRound: getLastRoundReason(prev) !== null,
                         }],
                       };
                     });
@@ -1250,6 +1319,7 @@ VITE_SUPABASE_ANON_KEY=...</pre>
           const myDrinkAmount = (myPlayer?.weights.slice(-1)[0] || 0) - (currentRound?.targetWeight || 0);
           return (
             <Card className="border-amber-500/50 text-center py-10">
+              {currentRound?.isLastRound && <div className="inline-block mb-3 px-3 py-1 rounded-full bg-amber-500 text-slate-900 text-[10px] font-bungee uppercase">Letzte Runde</div>}
               <h2 className="text-xs font-bold text-amber-500 uppercase mb-2">Ziel</h2>
               <div className="text-6xl font-bungee text-white mb-2">{currentRound?.targetWeight}g</div>
               <div className="bg-slate-900 rounded-xl px-4 py-3 mb-6 inline-block">
@@ -1269,12 +1339,13 @@ VITE_SUPABASE_ANON_KEY=...</pre>
 
         {/* ─── WEIGHING_FINAL ────────────────────────────────────────────────── */}
         {game.status === GameStatus.WEIGHING_FINAL && (() => {
-          const maxW = (BOTTLE_SIZES[game.bottleSize] ?? BOTTLE_SIZES['0.5']).maxWeight;
+          const maxW = getMaxWeight(game.bottleSize);
 
           if (game.mode === 'host') {
             if (isCreator) {
               return (
                 <Card>
+                  <div className="text-center">{currentRound?.isLastRound && <div className="inline-block mb-3 px-3 py-1 rounded-full bg-amber-500 text-slate-900 text-[10px] font-bungee uppercase">Letzte Runde</div>}</div>
                   <h2 className="text-xl font-bungee text-center mb-4 uppercase">Endwiegen</h2>
                   <div className="text-center mb-6">
                     <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Ziel</p>
@@ -1285,7 +1356,14 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                       const maxForP = p.weights[0] || maxW;
                       return (
                         <div key={p.id} className="flex items-center justify-between p-3 bg-slate-900/40 rounded-xl">
-                          <div className="font-bold">{p.name}</div>
+                          <div>
+                            <div className="font-bold">{p.name}</div>
+                            <button
+                              type="button"
+                              onClick={() => setAlmostEmptyInputs(prev => ({ ...prev, [p.id]: !prev[p.id] }))}
+                              className={`mt-1 text-[10px] font-bold uppercase ${almostEmptyInputs[p.id] ? 'text-amber-400' : 'text-slate-500'}`}
+                            >{almostEmptyInputs[p.id] ? '● Fast leer' : '○ Fast leer'}</button>
+                          </div>
                           <div className="flex items-center gap-2">
                             <Input
                               type="number"
@@ -1316,9 +1394,12 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                       updateGame(prev => {
                         if (!prev) return null;
                         const target = prev.rounds.slice(-1)[0].targetWeight;
+                        const lastIdx = prev.rounds.length - 1;
+                        const almostEmpty = Object.fromEntries(Object.entries(almostEmptyInputs).filter(([, v]) => v));
                         return {
                           ...prev,
                           status: GameStatus.ROUND_RESULT,
+                          rounds: prev.rounds.map((r, i) => i === lastIdx ? { ...r, almostEmpty } : r),
                           players: prev.players.map(p => ({
                             ...p,
                             weights: [...p.weights, parseInt(inputs[p.id])],
@@ -1327,6 +1408,7 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                         };
                       });
                       setInputs({});
+                      setAlmostEmptyInputs({});
                     }}
                     className="w-full py-4 font-bungee"
                   >AUSWERTEN</Button>
@@ -1351,6 +1433,7 @@ VITE_SUPABASE_ANON_KEY=...</pre>
 
           return (
             <Card>
+              <div className="text-center">{currentRound?.isLastRound && <div className="inline-block mb-3 px-3 py-1 rounded-full bg-amber-500 text-slate-900 text-[10px] font-bungee uppercase">Letzte Runde</div>}</div>
               <h2 className="text-xl font-bungee text-center mb-1 uppercase">Endwiegen</h2>
               <div className="text-center mb-4">
                 <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Ziel</p>
@@ -1364,6 +1447,9 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                 <div className="text-center py-4">
                   <div className="text-4xl font-bungee text-amber-500 mb-2">{mySubmitted}g</div>
                   <p className="text-slate-400 text-xs font-bold uppercase">Eingereicht – warte auf andere...</p>
+                  {myPlayerId && currentRound?.almostEmpty?.[myPlayerId] && (
+                    <p className="text-amber-400 text-[10px] font-bold uppercase mt-2">Fast leer gemeldet</p>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -1385,6 +1471,11 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                       <span className="absolute right-3 text-slate-400 font-bungee text-2xl pointer-events-none">G</span>
                     </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setAlmostEmptyInput(v => !v)}
+                    className={`w-full py-3 rounded-xl border-2 text-xs font-bold uppercase transition-colors ${almostEmptyInput ? 'bg-amber-500/20 border-amber-500 text-amber-400' : 'bg-slate-800 border-slate-700 text-slate-400'}`}
+                  >{almostEmptyInput ? '✓ Fast leer – reicht nur noch für eine Runde' : 'Fast leer?'}</button>
                   <Button
                     onClick={() => {
                       if (!myPlayerId || !currentRound) return;
@@ -1394,10 +1485,14 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                         if (!prev) return null;
                         const rounds = [...prev.rounds];
                         const lastIdx = rounds.length - 1;
-                        rounds[lastIdx] = { ...rounds[lastIdx], finalWeights: { ...rounds[lastIdx].finalWeights, [myPlayerId]: val } };
+                        // "Fast leer" im selben Schreibvorgang wie das Gewicht – kein extra Konflikt.
+                        const almostEmpty = { ...(rounds[lastIdx].almostEmpty ?? {}) };
+                        if (almostEmptyInput) almostEmpty[myPlayerId] = true; else delete almostEmpty[myPlayerId];
+                        rounds[lastIdx] = { ...rounds[lastIdx], finalWeights: { ...rounds[lastIdx].finalWeights, [myPlayerId]: val }, almostEmpty };
                         return { ...prev, rounds };
                       });
                       setWeightInput('');
+                      setAlmostEmptyInput(false);
                     }}
                     className="w-full py-4 font-bungee"
                   >EINWIEGEN</Button>
@@ -1513,19 +1608,13 @@ VITE_SUPABASE_ANON_KEY=...</pre>
 
               <Button
                 onClick={() => {
-                  const currentMin = minLastWeight(game.players);
-                  const bottleCfg = BOTTLE_SIZES[game.bottleSize] ?? BOTTLE_SIZES['0.5'];
-                  const drunkPerPlayer = game.players
-                    .map(p => { const last = lastWeight(p); return last === null ? null : (p.weights[0] ?? last) - last; })
-                    .filter((d): d is number => d !== null);
-                  const maxDrunk = drunkPerPlayer.length ? Math.max(...drunkPerPlayer) : 0;
-                  const isFinished = currentMin !== null
-                    && (currentMin < bottleCfg.finishedThreshold || maxDrunk >= bottleCfg.liquidWeight);
+                  // Finale nur nach einer angekündigten letzten Runde – nie überraschend.
+                  const isFinished = Boolean(currentRound?.isLastRound);
                   updateGame(p => p ? { ...p, status: isFinished ? GameStatus.FINISHED : GameStatus.SETTING_TARGET, currentRoundIndex: p.currentRoundIndex + 1 } : null);
                 }}
                 disabled={!penaltyTargetId}
                 className="w-full py-4 font-bungee"
-              >NÄCHSTE RUNDE</Button>
+              >{currentRound?.isLastRound ? 'ZUM FINALE' : 'NÄCHSTE RUNDE'}</Button>
             </div>
           );
         })()}
