@@ -873,6 +873,21 @@ VITE_SUPABASE_ANON_KEY=...</pre>
     setPings(prev => ({ ...prev, [p.id]: { at: Date.now(), from: ping.fromName } }));
     if (channelRef.current) repo.sendPing(channelRef.current, ping);
   };
+  const sendReaction = (targetPlayerId: string, emoji: string) => {
+    const reaction: Reaction = { id: createId(), emoji, targetPlayerId, timestamp: Date.now() };
+    // Sofort selbst anzeigen: Broadcast schickt dem Absender
+    // seine eigene Nachricht nicht zurueck (self: false).
+    setReactions(prev => [...recentReactions(prev), reaction]);
+    if (channelRef.current) repo.sendReaction(channelRef.current, reaction);
+  };
+  const floatingReactionsFor = (playerId: string) => (
+    <div className="relative">
+      {recentReactions(reactions)
+        .filter(r => r.targetPlayerId === playerId)
+        .map(r => <FloatingReaction key={r.id} emoji={r.emoji} />)}
+    </div>
+  );
+
   const pingButton = (player: Player) => (
     <button
       type="button"
@@ -1289,15 +1304,23 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                     const isWinner = idx === 0;
                     const isLoser = idx === roundResults.length - 1;
                     return (
-                      <div key={p.id} className={`p-4 rounded-xl border flex justify-between items-center ${isWinner ? 'bg-green-500/10 border-green-500/30' : 'bg-slate-900/40 border-slate-700'}`}>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold">{p.name}</span>
-                          {isWinner && <span className="text-[10px] font-bold uppercase text-green-500 bg-green-500/20 px-2 py-0.5 rounded">Rundensieger</span>}
-                          {isLoser && !isWinner && <span className="text-[10px] font-bold uppercase text-amber-500 bg-amber-500/20 px-2 py-0.5 rounded">Rundenverlierer</span>}
+                      <div key={p.id} className={`px-4 py-3 rounded-xl border flex flex-col gap-2 ${isWinner ? 'bg-green-500/10 border-green-500/30' : 'bg-slate-900/40 border-slate-700'} ${p.id === myPlayerId ? 'ring-1 ring-inset ring-amber-500/40' : ''}`}>
+                        <div className="flex justify-between items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap min-w-0">
+                            <span className="font-bold">{p.name}</span>
+                            {p.id === myPlayerId && <span className="text-[10px] font-bold uppercase text-amber-500">Du</span>}
+                            {isWinner && <span className="text-[10px] font-bold uppercase text-green-500 bg-green-500/20 px-2 py-0.5 rounded">Rundensieger</span>}
+                            {isLoser && !isWinner && <span className="text-[10px] font-bold uppercase text-amber-500 bg-amber-500/20 px-2 py-0.5 rounded">Rundenverlierer</span>}
+                          </div>
+                          <div className={`font-bungee text-xl shrink-0 ${diff === 0 ? 'text-green-400' : isAbove ? 'text-red-400' : 'text-blue-400'}`}>{isAbove ? '+' : ''}{diff}g</div>
                         </div>
-                        <div className="text-right">
-                          <div className={`font-bungee text-xl ${diff === 0 ? 'text-green-400' : isAbove ? 'text-red-400' : 'text-blue-400'}`}>{isAbove ? '+' : ''}{diff}g</div>
-                          <div className="text-[10px] text-slate-500 uppercase font-bold">{diff === 0 ? 'PUNKTGELANDET' : isAbove ? 'ZU WENIG GETRUNKEN' : 'ZU VIEL GETRUNKEN'}</div>
+                        {/* Zweite Zeile: Einordnung links, Reaktionen rechts – die Zeile wird so kaum höher. */}
+                        <div className="flex justify-between items-center gap-2 min-h-[24px]">
+                          <div className="text-[10px] text-slate-500 uppercase font-bold whitespace-nowrap">{diff === 0 ? 'PUNKTGELANDET' : isAbove ? 'ZU WENIG GETRUNKEN' : 'ZU VIEL GETRUNKEN'}</div>
+                          <div className="flex items-center">
+                            {floatingReactionsFor(p.id)}
+                            {p.id !== myPlayerId && <EmojiBar compact onReact={(emoji) => sendReaction(p.id, emoji)} />}
+                          </div>
                         </div>
                       </div>
                     );
@@ -1413,13 +1436,7 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                   {p.id !== myPlayerId && (
                     <div className="mt-2 flex items-center justify-end gap-2">
                       {waiting && <div className="mr-auto">{pingButton(p)}</div>}
-                      <EmojiBar onReact={(emoji) => {
-                        const reaction: Reaction = { id: createId(), emoji, targetPlayerId: p.id, timestamp: Date.now() };
-                        // Sofort selbst anzeigen: Broadcast schickt dem Absender
-                        // seine eigene Nachricht nicht zurueck (self: false).
-                        setReactions(prev => [...recentReactions(prev), reaction]);
-                        if (channelRef.current) repo.sendReaction(channelRef.current, reaction);
-                      }} />
+                      <EmojiBar onReact={(emoji) => sendReaction(p.id, emoji)} />
                     </div>
                   )}
                 </div>

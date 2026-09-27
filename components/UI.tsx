@@ -82,7 +82,7 @@ export const BeerProgressBar: React.FC<{ progress: number, label?: string }> = (
 
 export const FloatingReaction: React.FC<{ emoji: string }> = ({ emoji }) => {
   return (
-    <div className="absolute -right-2 top-0 pointer-events-none animate-[floatUp_3s_ease-out_forwards] text-2xl z-50">
+    <div className="absolute -right-2 top-0 pointer-events-none animate-[floatUp_3s_ease-in-out_forwards] text-2xl z-50">
       {emoji}
     </div>
   );
@@ -108,10 +108,10 @@ export const RisingReaction: React.FC<{ reaction: { id: string; emoji: string } 
   );
 };
 
-export const EmojiBar: React.FC<{ onReact: (emoji: string) => void }> = ({ onReact }) => {
+export const EmojiBar: React.FC<{ onReact: (emoji: string) => void; compact?: boolean }> = ({ onReact, compact = false }) => {
   const emojis = ['🍻', '🔥', '🎯', '💀', '🤡', '🚀'];
   return (
-    <div className="flex gap-1 bg-slate-900/80 backdrop-blur p-1 rounded-full border border-slate-700 shadow-lg translate-y-[-2px]">
+    <div className={`flex bg-slate-900/80 backdrop-blur rounded-full border border-slate-700 shadow-lg ${compact ? 'gap-0.5 p-0.5' : 'gap-1 p-1 translate-y-[-2px]'}`}>
       {emojis.map(e => (
         <button
           key={e}
@@ -119,7 +119,8 @@ export const EmojiBar: React.FC<{ onReact: (emoji: string) => void }> = ({ onRea
             ev.stopPropagation();
             onReact(e);
           }}
-          className="hover:scale-125 transition-transform p-1 text-sm active:scale-90"
+          aria-label={`${e} senden`}
+          className={`hover:scale-125 transition-transform p-1 active:scale-90 ${compact ? 'text-xs' : 'text-sm'}`}
         >
           {e}
         </button>
