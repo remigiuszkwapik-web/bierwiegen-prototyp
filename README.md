@@ -42,6 +42,12 @@ Damit Mitspieler Änderungen sofort sehen, muss `games` in der Realtime-Publikat
 
 > **Hinweis zum Gratis-Tarif:** Supabase pausiert kostenlose Projekte nach etwa einer Woche
 > ohne Zugriff. Dann im Dashboard auf **Restore project** — URL und Key bleiben dabei gleich.
+>
+> Damit es gar nicht so weit kommt, pingt `.github/workflows/supabase-keepalive.yml` die Datenbank
+> alle drei Tage mit einer kleinen lesenden Abfrage an (nutzt dieselben Secrets wie der Deploy).
+> Manuell starten: **Actions → Supabase Keep-Alive → Run workflow**. Schlägt der Ping fehl, wird der
+> Lauf rot und GitHub schickt eine Mail. Achtung: GitHub schaltet geplante Workflows ab, wenn im Repo
+> 60 Tage lang nichts passiert — dann im Actions-Tab wieder aktivieren.
 
 ## Deployment
 
