@@ -1,0 +1,38 @@
+name: Supabase Keep-Alive
+
+# Supabase pausiert Gratis-Projekte nach etwa einer Woche ohne Zugriff.
+# Die App ist rein statisch, ohne Spielrunde passiert also nichts. Dieser
+# Workflow stellt alle drei Tage eine kleine lesende Abfrage an die Tabelle
+# "games" – mit denselben Rechten wie die App, es wird nichts geschrieben.
+# Hinweis: Geplante Workflows laufen nur vom Default-Branch (main) aus.
+
+on:
+  schedule:
+    # Alle 3 Tage um 06:17 UTC (krumme Minute: zur vollen Stunde ist GitHub oft verzoegert)
+    - cron: '17 6 */3 * *'
+  # Erlaubt manuelles Ausloesen ueber den Actions-Tab
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Datenbank anpingen
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "::error::VITE_SUPABASE_URL oder VITE_SUPABASE_ANON_KEY fehlt in den Repository-Secrets."
+            exit 1
+          fi
+          # --fail: ein Fehler (z. B. Projekt schon pausiert) macht den Lauf rot,
+          # GitHub schickt dann eine Mail.
+          curl --fail-with-body --silent --show-error \
+            --retry 3 --retry-delay 10 --max-time 30 \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            "${SUPABASE_URL%/}/rest/v1/games?select=id&limit=1" \
+            -o /dev/null -w "Supabase antwortet mit HTTP %{http_code}\n"

@@ -4,7 +4,7 @@ import Lottie from 'lottie-react';
 import cheersAnimation from './src/assets/cheers.json';
 import { Game, GameStatus, Player, Round, Reaction, Ping, PresetBottleSize, DrinkType } from './types';
 import { SupabaseGameRepository, isSupabaseConfigured } from './repositories/GameRepository';
-import { Card, Button, Input, FloatingReaction, RisingReaction, EmojiBar, PlacementCard, SwipeTabs, SwipePage, DotBadge, CountBadge } from './components/UI';
+import { Card, Button, Input, FloatingReaction, RisingReaction, EmojiBar, PlacementCard, SwipeTabs, SwipePage, DotBadge, CountBadge, QrInviteModal } from './components/UI';
 import { BOTTLE_SIZES, DRINK_THEMES, DRINK_STORAGE_KEY, applyDrinkTheme, MIN_DRINK_AMOUNT, CUSTOM_VOLUME_MIN, CUSTOM_VOLUME_MAX } from './constants';
 import {
   calculateAverageDeviation,
@@ -51,7 +51,19 @@ const minLastWeight = (players: Player[]): number | null => {
 };
 
 // ─── DEV MODE ────────────────────────────────────────────────────────────────
+// Link, mit dem Mitspieler direkt in die Lobby kommen (Einladungslink + QR-Code).
+// Nur Code als Parameter – ein ?dev=true soll nicht mitwandern.
+const buildInviteUrl = (gameCode: string) => {
+  const url = new URL(window.location.href);
+  url.search = '';
+  url.hash = '';
+  url.searchParams.set('code', gameCode);
+  return url.toString();
+};
+
 const IS_DEV_PARAM = new URLSearchParams(window.location.search).get('dev') === 'true';
+// Beim Laden einmal festhalten – der Parameter wird danach aus der Adresszeile entfernt
+const INVITE_CODE = new URLSearchParams(window.location.search).get('code')?.toUpperCase().trim() || null;
 
 const DEMO_GAME: Game = {
   id: 'demo-game',
@@ -94,6 +106,7 @@ const App: React.FC = () => {
     return saved && saved in DRINK_THEMES ? saved : 'beer';
   });
   const [copyFeedback, setCopyFeedback] = useState(false);
+  const [showQr, setShowQr] = useState(false);
   const [devMode, setDevMode] = useState(IS_DEV_PARAM);
   const devModeRef = useRef(IS_DEV_PARAM);
   useEffect(() => { devModeRef.current = devMode; }, [devMode]);
@@ -178,11 +191,20 @@ const App: React.FC = () => {
     }
   }, [game?.status]);
 
+  // Einladungslink / QR-Code: ?code=XXXX tritt direkt dem Spiel bei.
+  // Danach den Parameter entfernen, damit ein Neuladen nach dem Verlassen
+  // nicht wieder automatisch in dieselbe Lobby fuehrt.
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get('code');
-    if (code) setJoinCodeInput(code.toUpperCase());
-  }, []);
+    if (IS_DEV_PARAM) return;
+    if (!INVITE_CODE) return;
+    setJoinCodeInput(INVITE_CODE);
+    const url = new URL(window.location.href);
+    url.searchParams.delete('code');
+    window.history.replaceState(null, '', url.toString());
+    // Gleiches Spiel wie die gespeicherte Sitzung: das uebernimmt die Wiederherstellung
+    if (INVITE_CODE === localStorage.getItem('bierwiegen_last_session')) return;
+    joinGame(INVITE_CODE);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Farbschema: gilt nur auf diesem Gerät, wird lokal gemerkt
   useEffect(() => {
@@ -216,6 +238,8 @@ const App: React.FC = () => {
     const savedCode = localStorage.getItem('bierwiegen_last_session');
     const savedPlayerId = localStorage.getItem('bierwiegen_player_id');
     if (!savedCode) return;
+    // Per Einladung in ein anderes Spiel gekommen: alte Sitzung nicht drueberladen
+    if (INVITE_CODE && INVITE_CODE !== savedCode) return;
     repo.loadGame(savedCode).then(loaded => {
       if (loaded) {
         setGame(loaded);
@@ -423,8 +447,14 @@ const App: React.FC = () => {
     if (IS_DEV_PARAM) loadDemoGame();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const joinGame = async () => {
-    const code = joinCodeInput.toUpperCase().trim();
+  const copyInviteLink = (gameCode: string) => {
+    navigator.clipboard.writeText(buildInviteUrl(gameCode));
+    setCopyFeedback(true);
+    setTimeout(() => setCopyFeedback(false), 2000);
+  };
+
+  const joinGame = async (codeOverride?: string) => {
+    const code = (codeOverride ?? joinCodeInput).toUpperCase().trim();
     if (!code) return;
     try {
       const loaded = await repo.loadGame(code);
@@ -631,7 +661,7 @@ VITE_SUPABASE_ANON_KEY=...</pre>
                 placeholder="CODE"
                 className="w-full bg-transparent text-center font-bungee text-4xl tracking-[0.4em] focus:outline-none text-white placeholder:text-slate-700 py-1"
               />
-              <Button onClick={joinGame} variant="secondary" className="w-full">BEITRETEN</Button>
+              <Button onClick={() => joinGame()} variant="secondary" className="w-full">BEITRETEN</Button>
             </div>
           </div>
         </div>
@@ -673,7 +703,6 @@ VITE_SUPABASE_ANON_KEY=...</pre>
   if (!myPlayerId) {
     const inSetup = game.status === GameStatus.SETUP;
     const leave = () => { setGame(null); setMyPlayerId(null); localStorage.removeItem('bierwiegen_last_session'); localStorage.removeItem('bierwiegen_player_id'); };
-    const copyLink = () => { const url = new URL(window.location.href); url.searchParams.set('code', game.gameCode); navigator.clipboard.writeText(url.toString()); setCopyFeedback(true); setTimeout(() => setCopyFeedback(false), 2000); };
     const claimPlayer = (p: Player) => {
       setMyPlayerId(p.id);
       setDrinkStep(true);
@@ -824,10 +853,18 @@ VITE_SUPABASE_ANON_KEY=...</pre>
           {/* Creator: Link teilen + Start */}
           {isCreator && inSetup && (
             <div className="space-y-3">
-              <button
-                onClick={copyLink}
-                className={`w-full text-[10px] font-bold uppercase py-2 rounded-lg border transition-colors ${copyFeedback ? 'text-green-500 border-green-500/30' : 'text-slate-400 border-slate-700'}`}
-              >{copyFeedback ? '✓ Link kopiert' : 'Einladungslink kopieren'}</button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => copyInviteLink(game.gameCode)}
+                  className={`flex-1 text-[10px] font-bold uppercase py-2 rounded-lg border transition-colors ${copyFeedback ? 'text-green-500 border-green-500/30' : 'text-slate-400 border-slate-700'}`}
+                >{copyFeedback ? '✓ Link kopiert' : 'Einladungslink kopieren'}</button>
+                <button
+                  onClick={() => setShowQr(true)}
+                  className="px-4 text-[10px] font-bold uppercase py-2 rounded-lg border text-slate-400 border-slate-700"
+                  title="QR-Code zum Beitreten anzeigen"
+                >QR-Code</button>
+              </div>
+              {showQr && <QrInviteModal url={buildInviteUrl(game.gameCode)} code={game.gameCode} onClose={() => setShowQr(false)} />}
               <Button
                 onClick={() => updateGameFresh(p => p ? { ...p, status: GameStatus.WEIGHING_INITIAL } : null)}
                 disabled={game.players.length < 1}
@@ -1044,11 +1081,19 @@ VITE_SUPABASE_ANON_KEY=...</pre>
               ))}
             </div>
             {isCreator && (
-              <button
-                onClick={() => { const url = new URL(window.location.href); url.searchParams.set('code', game.gameCode); navigator.clipboard.writeText(url.toString()); setCopyFeedback(true); setTimeout(() => setCopyFeedback(false), 2000); }}
-                className={`w-full mt-3 text-[10px] font-bold uppercase py-2 rounded-lg border transition-colors ${copyFeedback ? 'text-green-500 border-green-500/30' : 'text-slate-400 border-slate-700'}`}
-              >{copyFeedback ? '✓ Link kopiert' : 'Einladungslink kopieren'}</button>
+              <div className="flex gap-2 mt-3">
+                <button
+                  onClick={() => copyInviteLink(game.gameCode)}
+                  className={`flex-1 text-[10px] font-bold uppercase py-2 rounded-lg border transition-colors ${copyFeedback ? 'text-green-500 border-green-500/30' : 'text-slate-400 border-slate-700'}`}
+                >{copyFeedback ? '✓ Link kopiert' : 'Einladungslink kopieren'}</button>
+                <button
+                  onClick={() => setShowQr(true)}
+                  className="px-4 text-[10px] font-bold uppercase py-2 rounded-lg border text-slate-400 border-slate-700"
+                  title="QR-Code zum Beitreten anzeigen"
+                >QR-Code</button>
+              </div>
             )}
+            {isCreator && showQr && <QrInviteModal url={buildInviteUrl(game.gameCode)} code={game.gameCode} onClose={() => setShowQr(false)} />}
             <button
               onClick={() => setMyPlayerId(null)}
               className="mt-4 text-slate-500 font-bold text-[10px] uppercase hover:text-slate-300"

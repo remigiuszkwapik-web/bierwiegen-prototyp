@@ -1,5 +1,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import QRCode from 'qrcode';
 
 export const Card: React.FC<{ children: React.ReactNode, className?: string }> = ({ children, className = '' }) => (
   <div className={`bg-slate-800/50 backdrop-blur-md border border-slate-700 rounded-3xl p-6 shadow-xl ${className}`}>
@@ -279,3 +281,53 @@ export const DotBadge: React.FC = () => (
 export const CountBadge: React.FC<{ count: number }> = ({ count }) => (
   <span aria-label={`${count} fehlen noch`} className="min-w-4 h-4 px-1 rounded-full bg-yellow-300 text-slate-900 text-[9px] font-extrabold inline-flex items-center justify-center">{count}</span>
 );
+
+// Vollbild-Overlay mit QR-Code zum Beitreten. Per Portal an <body>, weil die
+// Cards backdrop-blur nutzen und position:fixed sonst an der Card klebt.
+export const QrInviteModal: React.FC<{ url: string; code: string; onClose: () => void }> = ({ url, code, onClose }) => {
+  const [dataUrl, setDataUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    QRCode.toDataURL(url, { margin: 2, width: 480, errorCorrectionLevel: 'M' })
+      .then(d => { if (!cancelled) setDataUrl(d); })
+      .catch(() => { if (!cancelled) setDataUrl(null); });
+    return () => { cancelled = true; };
+  }, [url]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="QR-Code zum Beitreten"
+    >
+      <div
+        className="relative w-full max-w-xs bg-slate-800 border border-slate-700 rounded-3xl p-6 text-center shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-4 text-slate-400 text-lg font-bold"
+          aria-label="Schließen"
+        >✕</button>
+        <p className="text-[10px] font-bold text-slate-400 uppercase mb-4">Mit der Kamera scannen</p>
+        <div className="bg-white rounded-2xl p-2 mx-auto aspect-square w-full max-w-[240px] flex items-center justify-center">
+          {dataUrl
+            ? <img src={dataUrl} alt={`QR-Code für Spiel ${code}`} className="w-full h-full" style={{ imageRendering: 'pixelated' }} />
+            : <span className="text-slate-400 text-xs font-bold uppercase">…</span>}
+        </div>
+        <p className="text-[10px] font-bold text-slate-500 uppercase mt-5 mb-1">oder Code eingeben</p>
+        <p className="text-3xl font-bungee tracking-widest">{code}</p>
+      </div>
+    </div>,
+    document.body
+  );
+};
