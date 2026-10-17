@@ -1,15 +1,16 @@
 name: Supabase Keep-Alive
 
-# Supabase pausiert Gratis-Projekte nach etwa einer Woche ohne Zugriff.
-# Die App ist rein statisch, ohne Spielrunde passiert also nichts. Dieser
-# Workflow stellt alle drei Tage eine kleine lesende Abfrage an die Tabelle
-# "games" – mit denselben Rechten wie die App, es wird nichts geschrieben.
+# Supabase pausiert Gratis-Projekte nach etwa einer Woche ohne "ausreichende
+# Aktivitaet". Die App ist rein statisch, ohne Spielrunde passiert also nichts.
+# Ein Ping alle drei Tage hat Supabase nicht gereicht (Warnmail trotz gruener
+# Laeufe), deshalb jetzt taeglich und an Datenbank und Auth. Gleiche Rechte
+# wie die App, es wird nichts geschrieben.
 # Hinweis: Geplante Workflows laufen nur vom Default-Branch (main) aus.
 
 on:
   schedule:
-    # Alle 3 Tage um 06:17 UTC (krumme Minute: zur vollen Stunde ist GitHub oft verzoegert)
-    - cron: '17 6 */3 * *'
+    # Taeglich um 06:17 UTC (krumme Minute: zur vollen Stunde ist GitHub oft verzoegert)
+    - cron: '17 6 * * *'
   # Erlaubt manuelles Ausloesen ueber den Actions-Tab
   workflow_dispatch:
 
@@ -30,9 +31,13 @@ jobs:
           fi
           # --fail: ein Fehler (z. B. Projekt schon pausiert) macht den Lauf rot,
           # GitHub schickt dann eine Mail.
-          curl --fail-with-body --silent --show-error \
-            --retry 3 --retry-delay 10 --max-time 30 \
-            -H "apikey: $SUPABASE_ANON_KEY" \
-            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
-            "${SUPABASE_URL%/}/rest/v1/games?select=id&limit=1" \
-            -o /dev/null -w "Supabase antwortet mit HTTP %{http_code}\n"
+          ping() {
+            curl --fail-with-body --silent --show-error \
+              --retry 3 --retry-delay 10 --max-time 30 \
+              -H "apikey: $SUPABASE_ANON_KEY" \
+              -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+              "${SUPABASE_URL%/}$1" \
+              -o /dev/null -w "$1 -> HTTP %{http_code}\n"
+          }
+          ping "/rest/v1/games?select=id&limit=10"
+          ping "/auth/v1/health"
